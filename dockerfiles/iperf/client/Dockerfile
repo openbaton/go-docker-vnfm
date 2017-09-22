@@ -1,0 +1,5 @@
+FROM mcilloni/iperf3
+
+ENV SERVER_HOSTNAME "server-IOO"
+
+ENTRYPOINT  echo "HN: $SERVER_HOSTNAME" ; iperf3 -c $SERVER_HOSTNAME -t 300
