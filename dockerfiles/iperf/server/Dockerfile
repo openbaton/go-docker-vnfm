@@ -1,4 +1,4 @@
-FROM mcilloni/iperf3
+FROM networkstatic/iperf3
 
 EXPOSE 5201
 

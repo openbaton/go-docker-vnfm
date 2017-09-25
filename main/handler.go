@@ -1,26 +1,27 @@
 package main
 
 import (
+	"fmt"
+	"time"
+	"bufio"
 	"bytes"
-	"encoding/gob"
 	"errors"
+	"strings"
+	"context"
+	http "net/http"
+	"io/ioutil"
+	"encoding/gob"
+	"encoding/json"
 	"github.com/op/go-logging"
 	"github.com/dgraph-io/badger"
 	"github.com/openbaton/go-openbaton/sdk"
 	"github.com/openbaton/go-openbaton/catalogue"
-	"io/ioutil"
-	"context"
-	"fmt"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/strslice"
-	"time"
-	"strings"
-	"encoding/json"
 	"github.com/docker/go-connections/nat"
-	"bufio"
 )
 
 type NetConf struct {
@@ -48,7 +49,19 @@ var (
 )
 
 func getClient(instance catalogue.VIMInstance) (*client.Client, error) {
-	cli, err := client.NewClient(instance.AuthURL, instance.Tenant, nil, nil)
+	var cli *client.Client
+	var err error
+	if strings.HasPrefix(instance.AuthURL, "unix:") {
+		cli, err = client.NewClient(instance.AuthURL, instance.Tenant, nil, nil)
+	} else {
+		http_client := &http.Client{
+			Transport: &http.Transport{
+				//TLSClientConfig: tlsc,
+			},
+			CheckRedirect: client.CheckRedirect,
+		}
+		cli, err = client.NewClient(instance.AuthURL, instance.Tenant, http_client, nil)
+	}
 	return cli, err
 }
 
