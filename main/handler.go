@@ -8,20 +8,20 @@ import (
 	"errors"
 	"strings"
 	"context"
-	http "net/http"
+	"net/http"
 	"io/ioutil"
 	"encoding/gob"
 	"encoding/json"
 	"github.com/op/go-logging"
 	"github.com/dgraph-io/badger"
-	"github.com/openbaton/go-openbaton/sdk"
-	"github.com/openbaton/go-openbaton/catalogue"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
+	"github.com/openbaton/go-openbaton/sdk"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/strslice"
-	"github.com/docker/go-connections/nat"
+	"github.com/openbaton/go-openbaton/catalogue"
+	"github.com/docker/docker/api/types/container"
 )
 
 type NetConf struct {
@@ -302,11 +302,11 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig) (*container.Conta
 	config := &container.Config{
 		Image: cfg.ImageName,
 		Env:   envList,
-
 		//ExposedPorts: pBinds,
 		Hostname: cfg.Name,
 		Cmd:      cfg.Cmd,
 	}
+
 	resp, err := cl.ContainerCreate(ctx, config, &hostCfg, &networkingConfig, cfg.Name)
 	if err != nil {
 		return nil, err
@@ -320,6 +320,7 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig) (*container.Conta
 	h.readLogsFromContainer(cl, resp.ID, cfg)
 	return &resp, nil
 }
+
 func (h *HandlerVnfmImpl) readLogsFromContainer(cl *client.Client, contID string, cfg VnfrConfig) {
 	logs, _ := cl.ContainerLogs(ctx, contID, types.ContainerLogsOptions{
 		Details:    false,

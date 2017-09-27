@@ -1,0 +1,28 @@
+{
+    "name": "MongoDB",
+    "vendor": "TUB",
+    "version": "0.2",
+    "lifecycle_event": [],
+    "configurations": {
+      "configurationParameters": [],
+      "name": "mongo-configuration"
+    },
+    "virtual_link": [{
+      "name": "new-network"
+    }],
+    "vdu": [{
+      "vm_image": [
+      ],
+      "scale_in_out": 2,
+      "vnfc": [{
+        "connection_point": [{
+          "virtual_link_reference": "new-network"
+        }]
+      }]
+    }],
+    "deployment_flavour": [{
+      "flavour_key": "m1.small"
+    }],
+    "type": "mongodb",
+    "endpoint": "docker"
+  }

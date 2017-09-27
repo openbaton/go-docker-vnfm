@@ -1,0 +1,19 @@
+name: MongoDB
+description: MongoDB
+provider: TUB
+nfvo_version: 4.0.0
+vim_types:
+ - docker
+image:
+    upload: "check"
+    names:
+        - "mongo:latest"
+    link: "mongo:latest"
+image-config:
+    name: "mongo:latest"
+    diskFormat: QCOW2
+    containerFormat: BARE
+    minCPU: 2
+    minDisk: 5
+    minRam: 2048
+    isPublic: false
