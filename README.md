@@ -33,8 +33,38 @@ Afterwards you will find the binary file in the _main_ folder.
 Just run it as
 
 ```bash
-./docker-vnfm
+./docker-vnfm --help
+Usage of ./docker-vnfm:
+  -conf string
+        The config file of the Docker Vim Driver (default "config.toml")
+  -dir string
+        The directory where to persist the local db (default "badger")
+  -level string
+        The Log Level of the Docker Vim Driver (default "INFO")
+  -persist
+        to persist the local database using badger (default true)
 ``` 
+
+where config.toml looks like:
+
+```toml
+type        = "docker"
+endpoint    = "docker"
+allocate    = true
+workers     = 1
+description = "The Vnfm description"
+username    = "openbaton-manager-user"
+password    = "openbaton"
+logLevel    = "INFO"
+brokerIp    = "localhost"
+brokerPort  = 5672
+```
+
+Or if you don't need special configuration you can use the default values just by running:
+
+```bash
+./docker-vnfm
+```
 
 # How to use the Docker VNFM
 

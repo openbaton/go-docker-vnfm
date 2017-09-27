@@ -3,13 +3,45 @@ package main
 import (
 	"github.com/openbaton/go-openbaton/vnfmsdk"
 	"github.com/openbaton/go-openbaton/sdk"
+	"flag"
+	"os"
+	"fmt"
 )
 
 func main() {
 
-	h := &HandlerVnfmImpl{
-		logger: sdk.GetLogger("docker-vnfm","DEBUG"),
+	var configFile = flag.String("conf", "config.toml", "The config file of the Docker Vim Driver")
+	var level = flag.String("level", "INFO", "The Log Level of the Docker Vim Driver")
+	var persist = flag.Bool("persist", true, "to persist the local database using badger")
+	var dirPath = flag.String("dir", "badger", "The directory where to persist the local db")
+	flag.Parse()
+	pathExists, err := exists(*dirPath)
+	if err != nil {
+		fmt.Errorf("%v", err)
+		os.Exit(12)
 	}
-	InitDB(true,"badger")
-	vnfmsdk.Start("config.toml", h, "docker")
+	if !pathExists {
+		err = os.MkdirAll(*dirPath, os.ModePerm);
+		if err != nil {
+			fmt.Errorf("%v", err)
+			os.Exit(13)
+		}
+	}
+	h := &HandlerVnfmImpl{
+		logger: sdk.GetLogger("docker-vnfm", *level),
+	}
+
+	InitDB(*persist, *dirPath)
+	vnfmsdk.Start(*configFile, h, "docker")
+}
+
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return true, err
 }
