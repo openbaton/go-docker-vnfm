@@ -3,10 +3,10 @@ package main
 import (
 	"github.com/openbaton/go-openbaton/vnfmsdk"
 	"github.com/openbaton/go-openbaton/sdk"
+	"github.com/openbaton/go-docker-vnfm/handler"
 	"flag"
 	"os"
 	"fmt"
-	"go-docker-vnfm/handler"
 )
 
 func main() {
