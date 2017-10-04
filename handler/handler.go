@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"fmt"
@@ -14,14 +14,14 @@ import (
 	"encoding/json"
 	"github.com/op/go-logging"
 	"github.com/dgraph-io/badger"
-	"github.com/docker/docker/client"
-	"github.com/docker/docker/api/types"
+	client "docker.io/go-docker"
+	"docker.io/go-docker/api/types"
 	"github.com/docker/go-connections/nat"
 	"github.com/openbaton/go-openbaton/sdk"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/strslice"
+	"docker.io/go-docker/api/types/network"
+	"docker.io/go-docker/api/types/strslice"
 	"github.com/openbaton/go-openbaton/catalogue"
-	"github.com/docker/docker/api/types/container"
+	"docker.io/go-docker/api/types/container"
 )
 
 type NetConf struct {
@@ -82,7 +82,7 @@ func InitDB(persist bool, dir_path string) {
 }
 
 type HandlerVnfmImpl struct {
-	logger *logging.Logger
+	Logger *logging.Logger
 }
 
 func (h *HandlerVnfmImpl) ActionForResume(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) catalogue.Action {
@@ -99,7 +99,7 @@ func (h *HandlerVnfmImpl) Configure(vnfr *catalogue.VirtualNetworkFunctionRecord
 }
 
 func (h *HandlerVnfmImpl) HandleError(vnfr *catalogue.VirtualNetworkFunctionRecord) error {
-	h.logger.Errorf("Recevied Error for vnfr: %v", vnfr.Name)
+	h.Logger.Errorf("Recevied Error for vnfr: %v", vnfr.Name)
 	return nil
 }
 
@@ -179,11 +179,11 @@ func saveConfig(vnfrId string, config VnfrConfig) error {
 
 func (h *HandlerVnfmImpl) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	js, _ := json.Marshal(dependency)
-	h.logger.Noticef("DepencencyRecord is: %s", string(js))
+	h.Logger.Noticef("DepencencyRecord is: %s", string(js))
 	config := VnfrConfig{}
 	err := getConfig(vnfr.ID, &config)
 	if err != nil {
-		h.logger.Errorf("Error while getting config: %v", err)
+		h.Logger.Errorf("Error while getting config: %v", err)
 		return nil, err
 	}
 
@@ -194,7 +194,7 @@ func (h *HandlerVnfmImpl) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, d
 		config.Foreign[foreignName] = make([]map[string]string, len(vnfcDepParam.Parameters))
 		x := 0
 		for _, depParam := range vnfcDepParam.Parameters {
-			h.logger.Debugf("Adding to config.foreign: %s", depParam.Parameters)
+			h.Logger.Debugf("Adding to config.foreign: %s", depParam.Parameters)
 			config.Foreign[foreignName][x] = depParam.Parameters
 			x++
 		}
@@ -207,10 +207,10 @@ func (h *HandlerVnfmImpl) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, d
 				tmpMap[key] = val
 			}
 		}
-		h.logger.Debugf("TempMap is %v", tmpMap)
+		h.Logger.Debugf("TempMap is %v", tmpMap)
 		config.Foreign[foreignName] = append(config.Foreign[foreignName], tmpMap)
 	}
-	h.logger.Noticef("%s: Foreign Config is: %v", config.Name, config.Foreign)
+	h.Logger.Noticef("%s: Foreign Config is: %v", config.Name, config.Foreign)
 	saveConfig(vnfr.ID, config)
 	return vnfr, nil
 }
@@ -241,7 +241,7 @@ func (h *HandlerVnfmImpl) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*
 	cfg := VnfrConfig{}
 	err := getConfig(vnfr.ID, &cfg)
 	if err != nil {
-		h.logger.Errorf("Error while getting config: %v", err)
+		h.Logger.Errorf("Error while getting config: %v", err)
 		return nil, err
 	}
 	resp, err := h.dockerStartContainer(cfg)
@@ -257,7 +257,7 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig) (*container.Conta
 
 	cl, err := getClient(cfg.VimInstance)
 	if err != nil {
-		h.logger.Errorf("Error while getting client: %v", err)
+		h.Logger.Errorf("Error while getting client: %v", err)
 		return nil, err
 	}
 	endCfg := make(map[string]*network.EndpointSettings)
@@ -296,8 +296,8 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig) (*container.Conta
 		}
 	}
 
-	h.logger.Noticef("%s: EnvVar: %v", cfg.Name, envList)
-	h.logger.Noticef("%s: Image: %v", cfg.Name, cfg.ImageName)
+	h.Logger.Noticef("%s: EnvVar: %v", cfg.Name, envList)
+	h.Logger.Noticef("%s: Image: %v", cfg.Name, cfg.ImageName)
 
 	config := &container.Config{
 		Image: cfg.ImageName,
@@ -331,7 +331,7 @@ func (h *HandlerVnfmImpl) readLogsFromContainer(cl *client.Client, contID string
 		for {
 			rd := bufio.NewReader(logs)
 			line, _, err := rd.ReadLine()
-			h.logger.Infof("%s: Logs: %v", cfg.Name, string(line))
+			h.Logger.Infof("%s: Logs: %v", cfg.Name, string(line))
 			if err != nil {
 				break
 			}
@@ -352,16 +352,16 @@ func (h *HandlerVnfmImpl) StopVNFCInstance(vnfr *catalogue.VirtualNetworkFunctio
 }
 
 func (h *HandlerVnfmImpl) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
-	h.logger.Noticef("Remove container for vnfr: %v", vnfr.Name)
+	h.Logger.Noticef("Remove container for vnfr: %v", vnfr.Name)
 	cfg := &VnfrConfig{}
 	err := getConfig(vnfr.ID, cfg)
 	if err != nil {
-		h.logger.Errorf("Error while getting config: %v", err)
+		h.Logger.Errorf("Error while getting config: %v", err)
 		return nil, err
 	}
 	cl, err := getClient(cfg.VimInstance)
 	if err != nil {
-		h.logger.Errorf("Error while getting client: %v", err)
+		h.Logger.Errorf("Error while getting client: %v", err)
 		return nil, err
 	}
 	var timeout time.Duration = 10 * time.Second

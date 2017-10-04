@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"fmt"
+	"go-docker-vnfm/handler"
 )
 
 func main() {
@@ -27,11 +28,11 @@ func main() {
 			os.Exit(13)
 		}
 	}
-	h := &HandlerVnfmImpl{
-		logger: sdk.GetLogger("docker-vnfm", *level),
+	h := &handler.HandlerVnfmImpl{
+		Logger: sdk.GetLogger("docker-vnfm", *level),
 	}
 
-	InitDB(*persist, *dirPath)
+	handler.InitDB(*persist, *dirPath)
 	vnfmsdk.Start(*configFile, h, "docker")
 }
 
