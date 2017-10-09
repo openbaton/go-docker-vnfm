@@ -15,7 +15,7 @@ func main() {
 	var level = flag.String("level", "INFO", "The Log Level of the Docker Vim Driver")
 	var persist = flag.Bool("persist", true, "to persist the local database using badger")
 	var swarm = flag.Bool("swarm", true, "Use Handler for docker swarm services")
-	var certFolder = flag.String("swarm", "/Users/usr/.docker/machine/machines/myvm1/", "Use Handler for docker swarm services")
+	var certFolder = flag.String("cert", "/Users/usr/.docker/machine/machines/myvm1/", "Use Handler for docker swarm services")
 	var tsl = flag.Bool("tsl", false, "Use docker client with tsl")
 	var dirPath = flag.String("dir", "badger", "The directory where to persist the local db")
 
