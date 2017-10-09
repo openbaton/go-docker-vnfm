@@ -12,6 +12,9 @@ import (
 	client "docker.io/go-docker"
 	"strings"
 	"errors"
+	"github.com/stretchr/testify/assert"
+	//"time"
+	"encoding/json"
 )
 
 var log *logging.Logger = sdk.GetLogger("docker_vnfm_test", "DEBUG")
@@ -44,7 +47,7 @@ func TestDockerListImagesByName(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	images, err := getImagesByName(cli,"iperfclient")
+	images, err := getImagesByName(cli, "iperfclient")
 	if err != nil {
 		panic(err)
 	}
@@ -79,13 +82,12 @@ func getImagesByName(cl *client.Client, imageName string) ([]types.ImageSummary,
 
 func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
-		if strings.Contains(b ,a) {
+		if strings.Contains(b, a) {
 			return true
 		}
 	}
 	return false
 }
-
 
 func TestDockerListContainers(t *testing.T) {
 
@@ -105,7 +107,7 @@ func TestDockerListContainers(t *testing.T) {
 		fmt.Printf("%v\n", container.Names)
 		fmt.Printf("%v\n", container.HostConfig)
 		fmt.Printf("%v\n", container.Labels)
-		for _, net := range       container.NetworkSettings.Networks{
+		for _, net := range container.NetworkSettings.Networks {
 			fmt.Printf("\t%v\n", net.IPAddress)
 			fmt.Printf("\t%v\n", net.NetworkID)
 			fmt.Printf("\t%v\n", net.EndpointID)
@@ -118,10 +120,32 @@ func TestDockerListContainers(t *testing.T) {
 	}
 }
 
+func TestCreateService(t *testing.T) {
+	cli, err := getClient(getVimInstance(), certDirectory, true)
+	assert.NoError(t, err)
+	imagename := "iperfserver"
+	hostname := "iperfsrv"
+	netId := "eiuh5t94dv2j"
+	res, err := createService(cli, ctx, 0, imagename, hostname, []string{netId}, []string{})
+	if !assert.NoError(t, err) {
+		assert.FailNow(t, err.Error())
+	}
+	service, _, err := cli.ServiceInspectWithRaw(ctx, res.ID, types.ServiceInspectOptions{})
+	if !assert.NoError(t, err) {
+		assert.FailNow(t, err.Error())
+	}
+	err = updateService(cli, ctx, &service, 5, []string{})
+	if !assert.NoError(t, err) {
+		assert.FailNow(t, err.Error())
+	}
+	val, err := json.MarshalIndent(service, "", "  ")
+	fmt.Println("%v", string(val))
+}
+
 func getVimInstance() *catalogue.VIMInstance {
 	return &catalogue.VIMInstance{
 		Tenant:  "1.32",
 		Name:    "test",
-		AuthURL: "unix:///var/run/docker.sock",
+		AuthURL: "tcp://192.168.99.100:2376",
 	}
 }

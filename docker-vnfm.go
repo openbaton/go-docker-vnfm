@@ -14,7 +14,10 @@ func main() {
 	var configFile = flag.String("conf", "config.toml", "The config file of the Docker Vim Driver")
 	var level = flag.String("level", "INFO", "The Log Level of the Docker Vim Driver")
 	var persist = flag.Bool("persist", true, "to persist the local database using badger")
+	var swarm = flag.Bool("swarm", true, "Use Handler for docker swarm services")
+	var tsl = flag.Bool("tsl", false, "Use docker client with tsl")
 	var dirPath = flag.String("dir", "badger", "The directory where to persist the local db")
+
 	flag.Parse()
 	pathExists, err := exists(*dirPath)
 	if err != nil {
@@ -28,8 +31,18 @@ func main() {
 			os.Exit(13)
 		}
 	}
-	h := &handler.HandlerVnfmImpl{
-		Logger: sdk.GetLogger("docker-vnfm", *level),
+	var h vnfmsdk.HandlerVnfm
+	logger := sdk.GetLogger("docker-vnfm", *level)
+	if *swarm {
+		h = &handler.HandlerVnfmSwarm{
+			Logger: logger,
+			Tsl: *tsl,
+		}
+	} else {
+		h = &handler.HandlerVnfmImpl{
+			Logger: logger,
+			Tsl:    *tsl,
+		}
 	}
 
 	handler.InitDB(*persist, *dirPath)

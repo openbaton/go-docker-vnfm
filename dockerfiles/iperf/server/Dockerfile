@@ -1,5 +1,7 @@
-FROM networkstatic/iperf3
+FROM ubuntu:16.04
 
-EXPOSE 5201
+EXPOSE 5001
 
-ENTRYPOINT ["iperf3", "-s"]
+RUN apt update && apt install iperf
+
+ENTRYPOINT ["iperf", "-s"]
