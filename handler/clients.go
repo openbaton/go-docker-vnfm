@@ -15,8 +15,6 @@ import (
 	"crypto/tls"
 )
 
-const certDirectory string = "/Users/lto/.docker/machine/machines/myvm1/"
-
 func getClient(instance *catalogue.VIMInstance, certDirectory string, tsl bool) (*docker.Client, error) {
 	var cli *docker.Client
 	var err error

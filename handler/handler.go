@@ -48,8 +48,9 @@ var (
 )
 
 type HandlerVnfmImpl struct {
-	Logger *logging.Logger
-	Tsl    bool
+	Logger     *logging.Logger
+	Tsl        bool
+	CertFolder string
 }
 
 func (h *HandlerVnfmImpl) ActionForResume(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) catalogue.Action {
@@ -245,7 +246,7 @@ func (h *HandlerVnfmImpl) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*
 
 func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.VirtualDeploymentUnit) (*container.ContainerCreateCreatedBody, error) {
 
-	cl, err := getClient(cfg.VimInstance[vdu.ID], certDirectory, h.Tsl)
+	cl, err := getClient(cfg.VimInstance[vdu.ID], h.CertFolder, h.Tsl)
 	if err != nil {
 		h.Logger.Errorf("Error while getting client: %v", err)
 		return nil, err
@@ -350,7 +351,7 @@ func (h *HandlerVnfmImpl) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecord
 		return nil, err
 	}
 	for _, vdu := range vnfr.VDUs {
-		cl, err := getClient(cfg.VimInstance[vdu.ID], certDirectory, h.Tsl)
+		cl, err := getClient(cfg.VimInstance[vdu.ID], h.CertFolder, h.Tsl)
 		if err != nil {
 			h.Logger.Errorf("Error while getting client: %v", err)
 			return nil, err

@@ -17,8 +17,9 @@ import (
 )
 
 type HandlerVnfmSwarm struct {
-	Logger *logging.Logger
-	Tsl bool
+	Logger     *logging.Logger
+	Tsl        bool
+	CertFolder string
 }
 
 func (h *HandlerVnfmSwarm) ActionForResume(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) catalogue.Action {
@@ -111,7 +112,7 @@ func (h *HandlerVnfmSwarm) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 		config.ImageName = imageChosen
 		// Starting service
 		hostname := fmt.Sprintf("%s-%s", vnfr.Name, sdk.RandomString(4))
-		cli, err := getClient(vimInstanceChosen, certDirectory, h.Tsl)
+		cli, err := getClient(vimInstanceChosen, h.CertFolder, h.Tsl)
 		if err != nil {
 			h.Logger.Errorf("Error: %v", err)
 			return nil, err
@@ -172,9 +173,9 @@ func (h *HandlerVnfmSwarm) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 	return vnfr, err
 }
 func chooseImage(vdu *catalogue.VirtualDeploymentUnit, vimInstance *catalogue.VIMInstance) (string, error) {
-	for _, img := range vimInstance.Images{
-		for _, imgName := range vdu.VMImages{
-			if img.Name == imgName || img.ID == imgName{
+	for _, img := range vimInstance.Images {
+		for _, imgName := range vdu.VMImages {
+			if img.Name == imgName || img.ID == imgName {
 				return imgName, nil
 			}
 		}
@@ -248,7 +249,7 @@ func (h *HandlerVnfmSwarm) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (
 	}
 	//resp, err := h.dockerStartContainer(cfg)
 	for _, vdu := range vnfr.VDUs {
-		cli, err := getClient(cfg.VimInstance[vdu.ID], certDirectory, h.Tsl)
+		cli, err := getClient(cfg.VimInstance[vdu.ID], h.CertFolder, h.Tsl)
 		if err != nil {
 			h.Logger.Errorf("Error while getting Client: %v", err)
 			return nil, err
@@ -327,7 +328,7 @@ func (h *HandlerVnfmSwarm) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecor
 		return vnfr, nil
 	}
 	for _, vdu := range vnfr.VDUs {
-		cl, err := getClient(cfg.VimInstance[vdu.ID], certDirectory, h.Tsl)
+		cl, err := getClient(cfg.VimInstance[vdu.ID], h.CertFolder, h.Tsl)
 		if err != nil {
 			h.Logger.Errorf("Error while getting client: %v", err)
 			return nil, err
