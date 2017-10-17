@@ -165,7 +165,7 @@ func (h *HandlerVnfmSwarm) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 		config.VduService[vdu.ID] = *srv
 	}
 
-	err := SaveConfig(vnfr.ID, config)
+	err := SaveConfig(vnfr.ID, config, h.Logger)
 	if err != nil {
 		h.Logger.Errorf("Error: %v", err)
 		return nil, err
@@ -196,7 +196,7 @@ func (h *HandlerVnfmSwarm) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, 
 	js, _ := json.Marshal(dependency)
 	h.Logger.Noticef("DepencencyRecord is: %s", string(js))
 	config := VnfrConfig{}
-	err := getConfig(vnfr.ID, &config)
+	err := getConfig(vnfr.ID, &config, h.Logger)
 	if err != nil {
 		h.Logger.Errorf("Error while getting config: %v", err)
 		return nil, err
@@ -224,7 +224,7 @@ func (h *HandlerVnfmSwarm) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, 
 		config.Foreign[foreignName] = append(config.Foreign[foreignName], tmpMap)
 	}
 	h.Logger.Noticef("%s: Foreign Config is: %v", config.Name, config.Foreign)
-	SaveConfig(vnfr.ID, config)
+	SaveConfig(vnfr.ID, config, h.Logger)
 	return vnfr, nil
 }
 
@@ -242,7 +242,7 @@ func (h *HandlerVnfmSwarm) Scale(scaleInOrOut catalogue.Action, vnfr *catalogue.
 
 func (h *HandlerVnfmSwarm) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	cfg := VnfrConfig{}
-	err := getConfig(vnfr.ID, &cfg)
+	err := getConfig(vnfr.ID, &cfg, h.Logger)
 	if err != nil {
 		h.Logger.Errorf("Error while getting config: %v", err)
 		return nil, err
@@ -264,7 +264,7 @@ func (h *HandlerVnfmSwarm) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (
 			return nil, err
 		}
 	}
-	SaveConfig(vnfr.ID, cfg)
+	SaveConfig(vnfr.ID, cfg, h.Logger)
 	return vnfr, nil
 }
 
@@ -321,7 +321,7 @@ func (h *HandlerVnfmSwarm) StopVNFCInstance(vnfr *catalogue.VirtualNetworkFuncti
 func (h *HandlerVnfmSwarm) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	h.Logger.Noticef("Remove container for vnfr: %v", vnfr.Name)
 	cfg := &VnfrConfig{}
-	err := getConfig(vnfr.ID, cfg)
+	err := getConfig(vnfr.ID, cfg, h.Logger)
 	if err != nil {
 		h.Logger.Errorf("Error while getting config: %v", err)
 		h.Logger.Errorf("Probably not found")

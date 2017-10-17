@@ -6,13 +6,15 @@ import (
 	"github.com/dgraph-io/badger"
 	"io/ioutil"
 	"fmt"
+	"github.com/op/go-logging"
 )
 
 func deleteConfig(vnfrId string) error {
 	return kv.Delete([]byte(vnfrId))
 }
 
-func getConfig(vnfrId string, config *VnfrConfig) error {
+func getConfig(vnfrId string, config *VnfrConfig, l *logging.Logger) error {
+	l.Debugf("Getting config with id: %v", vnfrId)
 	kvItem := badger.KVItem{}
 	kv.Get([]byte(vnfrId), &kvItem)
 	return kvItem.Value(func(bs []byte) error {
@@ -38,9 +40,10 @@ func InitDB(persist bool, dir_path string) {
 	}
 }
 
-func SaveConfig(vnfrId string, config VnfrConfig) error {
+func SaveConfig(vnfrId string, config VnfrConfig, l *logging.Logger) error {
 	//lock.Lock()
 	//defer lock.Unlock()
+	l.Debugf("Saving config with id: %v", vnfrId)
 	buf := new(bytes.Buffer)
 	err := gob.NewEncoder(buf).Encode(config)
 	if err != nil {
