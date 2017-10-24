@@ -11,13 +11,23 @@ import (
 
 func main() {
 
-	var configFile = flag.String("conf", "config.toml", "The config file of the Docker Vim Driver")
+	var configFile = flag.String("conf", "", "The config file of the Docker Vim Driver")
 	var level = flag.String("level", "INFO", "The Log Level of the Docker Vim Driver")
 	var persist = flag.Bool("persist", true, "to persist the local database using badger")
-	var swarm = flag.Bool("swarm", true, "Use Handler for docker swarm services")
+	var swarm = flag.Bool("swarm", false, "Use Handler for docker swarm services")
 	var certFolder = flag.String("cert", "/Users/usr/.docker/machine/machines/myvm1/", "Use Handler for docker swarm services")
 	var tsl = flag.Bool("tsl", false, "Use docker client with tsl")
 	var dirPath = flag.String("dir", "badger", "The directory where to persist the local db")
+
+	var typ = flag.String("type", "docker", "The type of the Docker Vim Driver")
+	var name = flag.String("name", "docker", "The docker vnfm name")
+	var description = flag.String("desc", "The docker vnfm", "The description of the Docker Vim Driver")
+	var username = flag.String("username", "openbaton-manager-user", "The registering user")
+	var password = flag.String("password", "openbaton", "The registering password")
+	var brokerIp = flag.String("ip", "localhost", "The Broker Ip")
+	var brokerPort = flag.Int("port", 5672, "The Broker Port")
+	var workers = flag.Int("workers", 5, "The number of workers")
+	var allocate = flag.Bool("allocate", true, "if the docker vnfm must allocate resources (must be true)")
 
 	flag.Parse()
 	pathExists, err := exists(*dirPath)
@@ -49,7 +59,11 @@ func main() {
 	}
 
 	handler.InitDB(*persist, *dirPath)
-	vnfmsdk.Start(*configFile, h, "docker")
+	if *configFile != "" {
+		vnfmsdk.Start(*configFile, h, "docker")
+	} else {
+		vnfmsdk.StartWithConfig(*typ, *description, *username, *password, *level, *brokerIp, *brokerPort, *workers, *allocate, h, *name)
+	}
 }
 
 func exists(path string) (bool, error) {

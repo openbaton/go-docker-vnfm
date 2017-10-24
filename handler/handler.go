@@ -13,13 +13,15 @@ import (
 	"docker.io/go-docker"
 	"docker.io/go-docker/api/types"
 	"github.com/docker/go-connections/nat"
-	"github.com/openbaton/go-openbaton/sdk"
 	"docker.io/go-docker/api/types/network"
 	"docker.io/go-docker/api/types/strslice"
 	"github.com/openbaton/go-openbaton/catalogue"
 	"docker.io/go-docker/api/types/container"
 	"docker.io/go-docker/api/types/swarm"
 	"math/rand"
+	"runtime/debug"
+	"docker.io/go-docker/api/types/mount"
+	"math"
 )
 
 type NetConf struct {
@@ -32,8 +34,11 @@ type VnfrConfig struct {
 	Name         string
 	DNSs         []string
 	ImageName    string
+	BaseHostname string
 	Cmd          strslice.StrSlice
+	PubPort      []string
 	ExpPort      []string
+	Mnts         []string
 	Own          map[string]string
 	NetworkCfg   map[string]NetConf
 	Foreign      map[string][]map[string]string
@@ -80,9 +85,11 @@ func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionReco
 		return nil, errors.New("no VDU provided")
 	}
 	config := VnfrConfig{
-		VnfrID:  vnfr.ID,
-		DNSs:    make([]string, 0),
-		ExpPort: make([]string, 0),
+		VnfrID:       vnfr.ID,
+		DNSs:         make([]string, 0),
+		PubPort:      make([]string, 0),
+		VimInstance:  make(map[string]*catalogue.VIMInstance),
+		ContainerIDs: make(map[string][]string),
 	}
 	ownConfig := make(map[string]string)
 
@@ -90,10 +97,21 @@ func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionReco
 		kLower := strings.ToLower(cp.ConfKey)
 		if strings.Contains(kLower, "cmd") || strings.Contains(kLower, "command") {
 			config.Cmd = strings.Split(cp.Value, " ")
+		} else if strings.Contains(kLower, "publish") {
+			config.PubPort = append(config.PubPort, cp.Value)
+		} else if kLower == "volumes" {
+			if strings.Contains(cp.Value, ";") {
+				config.Mnts = strings.Split(cp.Value, ";")
+			} else {
+				config.Mnts = []string{cp.Value}
+			}
+
 		} else if strings.Contains(kLower, "expose") {
-			config.ExpPort = append(config.ExpPort, cp.Value)
+			config.ExpPort = append(config.PubPort, cp.Value)
 		} else if strings.Contains(kLower, "dns") {
 			config.DNSs = append(config.DNSs, cp.Value)
+		} else if strings.Contains(kLower, "hostname") {
+			config.BaseHostname = cp.Value
 		} else {
 			ownConfig[cp.ConfKey] = cp.Value
 		}
@@ -103,20 +121,23 @@ func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionReco
 	config.NetworkCfg = make(map[string]NetConf)
 	netNames := make([]string, 0)
 	pubPorts := make([]string, 0)
-	for _, ps := range config.ExpPort {
+	for _, ps := range config.PubPort {
 		split := strings.Split(ps, ":")
+		h.Logger.Debugf("Ports: %d --> %d", split[0], split[1])
 		pubPorts = append(pubPorts, split[0], split[1])
 	}
 
 	for _, vdu := range vnfr.VDUs {
-		vnfr.VDUs[0].VNFCInstances = make([]*catalogue.VNFCInstance, 1)
-		vimInstanceChosen := vimInstances[vdu.ParentVDU][rand.Intn(len(vimInstances[vdu.ParentVDU]))-1]
+		vdu.VNFCInstances = make([]*catalogue.VNFCInstance, 0)
+		vimInstanceChosen := vimInstances[vdu.ParentVDU][rand.Intn(len(vimInstances[vdu.ParentVDU]))]
 		config.VimInstance[vdu.ID] = vimInstanceChosen
 
 		cps := make([]*catalogue.VNFDConnectionPoint, 0)
 
 		h.Logger.Debugf("%v VNF has %v VNFC(s)", vnfr.Name, len(vdu.VNFCs))
+		ips := make([]*catalogue.IP, 0)
 		for _, cp := range vdu.VNFCs[0].ConnectionPoints {
+			h.Logger.Debugf("%s: Fixed Ip is: %v", vnfr.Name, cp.FixedIp)
 			config.NetworkCfg[cp.VirtualLinkReference] = NetConf{
 				IpV4Address: cp.FixedIp,
 			}
@@ -131,9 +152,19 @@ func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionReco
 			h.Logger.Debugf("Adding New Connection Point: %v", newCp)
 			cps = append(cps, newCp)
 			netNames = append(netNames, cp.VirtualLinkReference)
+			ips = append(ips, &catalogue.IP{
+				NetName: cp.VirtualLinkReference,
+				IP:      cp.FixedIp,
+			})
+			config.Own[strings.ToUpper(cp.VirtualLinkReference)] = cp.FixedIp
 		}
-		config.ImageName = vdu.VMImages[0]
-		hostname := fmt.Sprintf("%s-%s", vnfr.Name, sdk.RandomString(4))
+		imageChosen, err := chooseImage(vdu, vimInstanceChosen)
+		hostname := fmt.Sprintf("%s", vnfr.Name)
+		if err != nil {
+			debug.PrintStack()
+			return nil, err
+		}
+		config.ImageName = imageChosen
 
 		for _, vnfc := range vdu.VNFCs {
 			vdu.VNFCInstances = append(vdu.VNFCInstances, &catalogue.VNFCInstance{
@@ -144,7 +175,7 @@ func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionReco
 				ConnectionPoints: cps,
 				VNFComponent:     vnfc,
 				//FloatingIPs:      fips,
-				//IPs:              ips,
+				IPs: ips,
 			})
 		}
 
@@ -157,8 +188,8 @@ func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionReco
 		return nil, err
 	}
 	return vnfr, err
-	return vnfr, err
 }
+
 func getNetworkIdsFromNames(cli *docker.Client, netNames []string) ([]string, error) {
 	nets, err := cli.NetworkList(ctx, types.NetworkListOptions{})
 	if err != nil {
@@ -178,7 +209,7 @@ func getNetworkIdsFromNames(cli *docker.Client, netNames []string) ([]string, er
 
 func (h *HandlerVnfmImpl) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	js, _ := json.Marshal(dependency)
-	h.Logger.Noticef("DepencencyRecord is: %s", string(js))
+	h.Logger.Debugf("DepencencyRecord is: %s", string(js))
 	config := VnfrConfig{}
 	err := getConfig(vnfr.ID, &config, h.Logger)
 	if err != nil {
@@ -206,10 +237,9 @@ func (h *HandlerVnfmImpl) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, d
 				tmpMap[key] = val
 			}
 		}
-		h.Logger.Debugf("TempMap is %v", tmpMap)
 		config.Foreign[foreignName] = append(config.Foreign[foreignName], tmpMap)
 	}
-	h.Logger.Noticef("%s: Foreign Config is: %v", config.Name, config.Foreign)
+	//h.Logger.Debugf("%s: Foreign Config is: %v", config.Name, config.Foreign)
 	SaveConfig(vnfr.ID, config, h.Logger)
 	return vnfr, nil
 }
@@ -247,47 +277,71 @@ func (h *HandlerVnfmImpl) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*
 func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.VirtualDeploymentUnit) (*container.ContainerCreateCreatedBody, error) {
 
 	cl, err := getClient(cfg.VimInstance[vdu.ID], h.CertFolder, h.Tsl)
+	mounts := make([]mount.Mount, len(cfg.Mnts))
+
+	for i, mnt := range cfg.Mnts {
+		split := strings.Split(mnt, ":")
+		readOnly := false
+		if len(split) > 2 {
+			readOnly = split[2] == "ro"
+		}
+		h.Logger.Debugf("%s: Mount  %s --> %s", cfg.Name, split[0], split[1])
+		mounts[i] = mount.Mount{
+			Source:   split[0],
+			Target:   split[1],
+			ReadOnly: readOnly,
+			Type:     mount.TypeBind,
+		}
+	}
 	if err != nil {
 		h.Logger.Errorf("Error while getting client: %v", err)
 		return nil, err
 	}
 	endCfg := make(map[string]*network.EndpointSettings)
 	for netName, values := range cfg.NetworkCfg {
+		hostnames := []string{fmt.Sprintf("%s.%s", cfg.Name, netName)}
+		h.Logger.Debugf("%v: Network %v --> %v, %v", cfg.Name, netName, values.IpV4Address, hostnames)
+		netIds, _ := getNetworkIdsFromNames(cl, []string{netName})
 		endCfg[netName] = &network.EndpointSettings{
 			IPAddress: values.IpV4Address,
-			Aliases:   []string{cfg.Name},
+			Aliases:   hostnames,
+			IPAMConfig: &network.EndpointIPAMConfig{
+				IPv4Address: values.IpV4Address,
+			},
+			NetworkID: netIds[0],
 		}
 	}
+	firstCfg := make(map[string]*network.EndpointSettings)
+	x := math.MaxInt64
+	var firstNetName string
+	for _, vnfc := range vdu.VNFCs {
+		for _, cp := range vnfc.ConnectionPoints {
+			if cp.InterfaceID < x {
+				firstNetName = cp.VirtualLinkReference
+				x = cp.InterfaceID
+			}
+		}
+	}
+	h.Logger.Debugf("%s: First network is: %s", cfg.Name, firstNetName)
+	firstCfg[firstNetName] = endCfg[firstNetName]
 
+	delete(endCfg, firstNetName)
 	networkingConfig := network.NetworkingConfig{
-		EndpointsConfig: endCfg,
+		EndpointsConfig: firstCfg,
 	}
 	pBinds := make(nat.PortSet)
-	for _, v := range cfg.ExpPort {
+	for _, v := range cfg.PubPort {
 		p, _ := nat.NewPort("tcp", v)
 		pBinds[p] = struct{}{}
 	}
 	hostCfg := container.HostConfig{
-		DNS: cfg.DNSs,
+		DNS:    cfg.DNSs,
+		CapAdd: []string{"NET_ADMIN", "SYS_ADMIN"},
+		Mounts: mounts,
 	}
-	envList := make([]string, len(cfg.Own))
+	envList := GetEnv(h.Logger, cfg)
 
-	x := 0
-	for k, v := range cfg.Own {
-		envList[x] = fmt.Sprintf("%s=%s", k, v)
-		x++
-	}
-	x = 0
-	for k, dp := range cfg.Foreign {
-		for _, kv := range dp {
-			for key, val := range kv {
-				envList = append(envList, fmt.Sprintf("%s_%s=%s", strings.ToUpper(k), strings.ToUpper(key), val))
-				x++
-			}
-		}
-	}
-
-	h.Logger.Noticef("%s: EnvVar: %v", cfg.Name, envList)
+	//h.Logger.Noticef("%s: EnvVar: %v", cfg.Name, envList)
 	h.Logger.Noticef("%s: Image: %v", cfg.Name, cfg.ImageName)
 
 	config := &container.Config{
@@ -308,11 +362,22 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.Vi
 	if err := cl.ContainerStart(ctx, resp.ID, options); err != nil {
 		return nil, err
 	}
-	h.readLogsFromContainer(cl, resp.ID, cfg)
+
+	for netName, endpointSettings := range endCfg {
+		h.Logger.Debugf("%v: Adding network %v", cfg.Name, netName)
+		netIds, _ := getNetworkIdsFromNames(cl, []string{netName})
+		err := cl.NetworkConnect(ctx, netIds[0], resp.ID, endpointSettings)
+		if err != nil {
+			h.Logger.Errorf("Error connecting to network: ", err)
+		}
+	}
+
+	go h.readLogsFromContainer(cl, resp.ID, cfg)
 	return &resp, nil
 }
 
 func (h *HandlerVnfmImpl) readLogsFromContainer(cl *docker.Client, contID string, cfg VnfrConfig) {
+	time.Sleep(5 * time.Second)
 	logs, _ := cl.ContainerLogs(ctx, contID, types.ContainerLogsOptions{
 		Details:    false,
 		Follow:     false,
@@ -322,7 +387,7 @@ func (h *HandlerVnfmImpl) readLogsFromContainer(cl *docker.Client, contID string
 		for {
 			rd := bufio.NewReader(logs)
 			line, _, err := rd.ReadLine()
-			h.Logger.Infof("%s: Logs: %v", cfg.Name, string(line))
+			h.Logger.Debugf("%s: Logs: %v", cfg.Name, string(line))
 			if err != nil {
 				break
 			}
@@ -348,7 +413,8 @@ func (h *HandlerVnfmImpl) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecord
 	err := getConfig(vnfr.ID, cfg, h.Logger)
 	if err != nil {
 		h.Logger.Errorf("Error while getting config: %v", err)
-		return nil, err
+		h.Logger.Errorf("Probably not found")
+		return vnfr, nil
 	}
 	for _, vdu := range vnfr.VDUs {
 		cl, err := getClient(cfg.VimInstance[vdu.ID], h.CertFolder, h.Tsl)
@@ -360,7 +426,7 @@ func (h *HandlerVnfmImpl) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecord
 		for _, ids := range cfg.ContainerIDs {
 			for _, id := range ids {
 				cl.ContainerStop(ctx, id, &timeout)
-				cl.ContainerRemove(ctx, id, types.ContainerRemoveOptions{
+				go cl.ContainerRemove(ctx, id, types.ContainerRemoveOptions{
 					Force: true,
 				})
 			}

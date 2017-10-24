@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"errors"
 	"encoding/json"
-	"github.com/openbaton/go-openbaton/sdk"
 	"github.com/openbaton/go-openbaton/catalogue"
 	"docker.io/go-docker/api/types"
 	"docker.io/go-docker"
@@ -51,6 +50,7 @@ func (h *HandlerVnfmSwarm) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 	config := VnfrConfig{
 		VnfrID:       vnfr.ID,
 		DNSs:         make([]string, 0),
+		PubPort:      make([]string, 0),
 		ExpPort:      make([]string, 0),
 		VimInstance:  make(map[string]*catalogue.VIMInstance),
 		VduService:   make(map[string]swarm.Service),
@@ -62,10 +62,21 @@ func (h *HandlerVnfmSwarm) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 		kLower := strings.ToLower(cp.ConfKey)
 		if strings.Contains(kLower, "cmd") || strings.Contains(kLower, "command") {
 			config.Cmd = strings.Split(cp.Value, " ")
+		} else if strings.Contains(kLower, "publish") {
+			config.PubPort = append(config.PubPort, cp.Value)
 		} else if strings.Contains(kLower, "expose") {
 			config.ExpPort = append(config.ExpPort, cp.Value)
+		} else if kLower == "volumes" {
+			if strings.Contains(cp.Value, ";") {
+				config.Mnts = strings.Split(cp.Value, ";")
+			} else {
+				config.Mnts = []string{cp.Value}
+			}
+
 		} else if strings.Contains(kLower, "dns") {
 			config.DNSs = append(config.DNSs, cp.Value)
+		} else if strings.Contains(kLower, "hostname") {
+			config.BaseHostname = cp.Value
 		} else {
 			ownConfig[cp.ConfKey] = cp.Value
 		}
@@ -75,7 +86,7 @@ func (h *HandlerVnfmSwarm) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 	config.NetworkCfg = make(map[string]NetConf)
 	netNames := make([]string, 0)
 	pubPorts := make([]string, 0)
-	for _, ps := range config.ExpPort {
+	for _, ps := range config.PubPort {
 		split := strings.Split(ps, ":")
 		pubPorts = append(pubPorts, split[0], split[1])
 	}
@@ -111,7 +122,9 @@ func (h *HandlerVnfmSwarm) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 		}
 		config.ImageName = imageChosen
 		// Starting service
-		hostname := fmt.Sprintf("%s-%s", vnfr.Name, sdk.RandomString(4))
+		if config.BaseHostname == "" {
+			config.BaseHostname = fmt.Sprintf("%s", vnfr.Name)
+		}
 		cli, err := getClient(vimInstanceChosen, h.CertFolder, h.Tsl)
 		if err != nil {
 			h.Logger.Errorf("Error: %v", err)
@@ -122,35 +135,36 @@ func (h *HandlerVnfmSwarm) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 			h.Logger.Errorf("Error: %v", err)
 			return nil, err
 		}
-		srv, err := createService(cli, ctx, 0, config.ImageName, hostname, netIds, pubPorts)
+		srv, err := createService(h.Logger, cli, ctx, 0, config.ImageName, config.BaseHostname, netIds, pubPorts)
 		if err != nil {
 			h.Logger.Errorf("Error: %v", err)
 			return nil, err
 		}
 
-		//TODO fix for more than one CP
 		fips := make([]*catalogue.IP, 0)
 		ips := make([]*catalogue.IP, 0)
 		for _, net := range srv.Endpoint.VirtualIPs {
-			h.Logger.Debugf("%v, FIP: %v", vnfr.Name, net)
+			h.Logger.Debugf("%v, IP: %v", vnfr.Name, net)
 			nameFromId, err := getNetNameFromId(cli, net.NetworkID)
 			if err != nil {
 				return nil, err
 			}
-			ips = append(fips, &catalogue.IP{
-				IP:      strings.Split(net.Addr, "/")[0],
+			ownIp := strings.Split(net.Addr, "/")[0]
+			config.Own[strings.ToUpper(nameFromId)] = ownIp
+			ips = append(ips, &catalogue.IP{
+				IP:      ownIp,
 				NetName: nameFromId,
 			})
-			fips = append(fips, &catalogue.IP{
-				NetName: nameFromId,
-				IP:      strings.Split(strings.Split(vimInstanceChosen.AuthURL, "//")[1], ":")[0],
-			})
+			//fips = append(fips, &catalogue.IP{
+			//	NetName: nameFromId,
+			//	IP:      strings.Split(strings.Split(vimInstanceChosen.AuthURL, "//")[1], ":")[0],
+			//})
 		}
 
 		for _, vnfc := range vdu.VNFCs {
 			vdu.VNFCInstances = append(vdu.VNFCInstances, &catalogue.VNFCInstance{
 				VIMID:            vimInstanceChosen.ID,
-				Hostname:         hostname,
+				Hostname:         config.BaseHostname,
 				State:            "ACTIVE",
 				VCID:             vnfc.ID,
 				ConnectionPoints: cps,
@@ -194,7 +208,7 @@ func getNetNameFromId(cl *docker.Client, netId string) (string, error) {
 
 func (h *HandlerVnfmSwarm) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	js, _ := json.Marshal(dependency)
-	h.Logger.Noticef("DepencencyRecord is: %s", string(js))
+	h.Logger.Debugf("DepencencyRecord is: %s", string(js))
 	config := VnfrConfig{}
 	err := getConfig(vnfr.ID, &config, h.Logger)
 	if err != nil {
@@ -206,10 +220,12 @@ func (h *HandlerVnfmSwarm) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, 
 		if config.Foreign == nil {
 			config.Foreign = make(map[string][]map[string]string)
 		}
-		config.Foreign[foreignName] = make([]map[string]string, 0)
+		config.Foreign[foreignName] = make([]map[string]string, len(vnfcDepParam.Parameters))
+		x := 0
 		for _, depParam := range vnfcDepParam.Parameters {
 			h.Logger.Debugf("Adding to config.foreign: %s", depParam.Parameters)
-			config.Foreign[foreignName] = append(config.Foreign[foreignName], depParam.Parameters)
+			config.Foreign[foreignName][x] = depParam.Parameters
+			x++
 		}
 	}
 
@@ -220,10 +236,9 @@ func (h *HandlerVnfmSwarm) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, 
 				tmpMap[key] = val
 			}
 		}
-		h.Logger.Debugf("TempMap is %v", tmpMap)
 		config.Foreign[foreignName] = append(config.Foreign[foreignName], tmpMap)
 	}
-	h.Logger.Noticef("%s: Foreign Config is: %v", config.Name, config.Foreign)
+	h.Logger.Debugf("%s: Foreign Config is: %v", config.Name, config.Foreign)
 	SaveConfig(vnfr.ID, config, h.Logger)
 	return vnfr, nil
 }
@@ -259,33 +274,14 @@ func (h *HandlerVnfmSwarm) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (
 			vnfcCount += uint64(len(vdu.VNFCs))
 		}
 		service := cfg.VduService[vdu.ID]
-		updateService(cli, ctx, &service, vnfcCount, h.getEnv(cfg))
+		err = updateService(h.Logger, cli, ctx, &service, vnfcCount, GetEnv(h.Logger, cfg), cfg.Mnts)
 		if err != nil {
-			return nil, err
+			h.Logger.Errorf("Unable to update: %v", err)
+			//return nil, err
 		}
 	}
 	SaveConfig(vnfr.ID, cfg, h.Logger)
 	return vnfr, nil
-}
-
-func (h *HandlerVnfmSwarm) getEnv(cfg VnfrConfig) []string {
-	envList := make([]string, len(cfg.Own))
-	x := 0
-	for k, v := range cfg.Own {
-		envList[x] = fmt.Sprintf("%s=%s", k, v)
-		x++
-	}
-	x = 0
-	for k, dp := range cfg.Foreign {
-		for _, kv := range dp {
-			for key, val := range kv {
-				envList = append(envList, fmt.Sprintf("%s_%s=%s", strings.ToUpper(k), strings.ToUpper(key), val))
-				x++
-			}
-		}
-	}
-	h.Logger.Noticef("%s: EnvVar: %v", cfg.Name, envList)
-	return envList
 }
 
 func (h *HandlerVnfmSwarm) readLogsFromContainer(cl *docker.Client, contID string, cfg VnfrConfig) {
