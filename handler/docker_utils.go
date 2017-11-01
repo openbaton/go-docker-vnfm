@@ -1,23 +1,23 @@
 package handler
 
 import (
-	"strings"
-	"docker.io/go-docker"
-	"github.com/openbaton/go-openbaton/catalogue"
-	"net/http"
-	"golang.org/x/net/context"
-	"docker.io/go-docker/api/types/swarm"
-	"docker.io/go-docker/api/types"
-	"github.com/docker/go-connections/tlsconfig"
-	"docker.io/go-docker/api"
-	"path/filepath"
-	"strconv"
-	"crypto/tls"
-	"docker.io/go-docker/api/types/mount"
 	"fmt"
-	"github.com/op/go-logging"
-	"github.com/pkg/errors"
 	"time"
+	"strconv"
+	"strings"
+	"net/http"
+	"crypto/tls"
+	"path/filepath"
+	"docker.io/go-docker"
+	"github.com/pkg/errors"
+	"docker.io/go-docker/api"
+	"golang.org/x/net/context"
+	"github.com/op/go-logging"
+	"docker.io/go-docker/api/types"
+	"docker.io/go-docker/api/types/swarm"
+	"docker.io/go-docker/api/types/mount"
+	"github.com/docker/go-connections/tlsconfig"
+	"github.com/openbaton/go-openbaton/catalogue"
 )
 
 func getClient(instance *catalogue.VIMInstance, certDirectory string, tsl bool) (*docker.Client, error) {
@@ -50,7 +50,7 @@ func getClient(instance *catalogue.VIMInstance, certDirectory string, tsl bool) 
 	return cli, err
 }
 
-func createService(l *logging.Logger, client *docker.Client, ctx context.Context, replicas uint64, image, baseHostname string, networkIds, pubPorts []string) (*swarm.Service, error) {
+func createService(l *logging.Logger, client *docker.Client, ctx context.Context, replicas uint64, image, baseHostname string, networkIds, pubPorts, constraints []string, aliases map[string][]string) (*swarm.Service, error) {
 	networks := make([]swarm.NetworkAttachmentConfig, 0)
 	for _, netId := range networkIds {
 		netName, err := getNetNameFromId(client, netId)
@@ -58,11 +58,16 @@ func createService(l *logging.Logger, client *docker.Client, ctx context.Context
 			l.Debugf("Error: %v", err)
 			return nil, err
 		}
-		aliases := []string{fmt.Sprintf("%s.%s", baseHostname, netName), baseHostname}
-		l.Debugf("Adding aliases %v --> %v", baseHostname, aliases)
+		var als []string
+		if val, ok := aliases[netName]; ok {
+			als = val
+		} else {
+			als = []string{fmt.Sprintf("%s.%s", baseHostname, netName), baseHostname}
+		}
+		l.Debugf("Adding aliases %v --> %v", baseHostname, als)
 		networks = append(networks, swarm.NetworkAttachmentConfig{
 			Target:  netId,
-			Aliases: aliases,
+			Aliases: als,
 		})
 	}
 
@@ -97,6 +102,9 @@ func createService(l *logging.Logger, client *docker.Client, ctx context.Context
 				Hostname: baseHostname,
 			},
 			Networks: networks,
+			Placement: &swarm.Placement{
+				Constraints: constraints,
+			},
 		},
 		Annotations: swarm.Annotations{
 			Name: baseHostname,
@@ -110,8 +118,10 @@ func createService(l *logging.Logger, client *docker.Client, ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	waitUntilIp(client, ctx, resp.ID)
 	srv, err := waitUntilIp(client, ctx, resp.ID)
+	if err != nil {
+		return nil, err
+	}
 	return srv, nil
 }
 func waitUntilIp(client *docker.Client, ctx context.Context, id string) (*swarm.Service, error) {
@@ -121,7 +131,7 @@ func waitUntilIp(client *docker.Client, ctx context.Context, id string) (*swarm.
 		if hasIp(srv) {
 			return &srv, err
 		}
-		if timeout > 1000 {
+		if timeout > 10000 {
 			return nil, errors.New("Timeout waiting for ip")
 		}
 		timeout++
@@ -138,9 +148,16 @@ func hasIp(service swarm.Service) bool {
 	return false
 }
 
-func updateService(l *logging.Logger, client *docker.Client, ctx context.Context, service *swarm.Service, replica uint64, env []string, mnts []string) (error) {
+func updateService(l *logging.Logger, client *docker.Client, ctx context.Context, service *swarm.Service, replica uint64, env, mnts, constraints []string, restartPolicy string) (error) {
 	mounts := make([]mount.Mount, len(mnts))
-
+	var rp swarm.RestartPolicyCondition
+	if restartPolicy == "on-failure" {
+		rp = swarm.RestartPolicyConditionOnFailure
+	} else if restartPolicy == "any" {
+		rp = swarm.RestartPolicyConditionAny
+	} else {
+		rp = swarm.RestartPolicyConditionNone
+	}
 	for i, mnt := range mnts {
 		split := strings.Split(mnt, ":")
 		readOnly := false
@@ -162,8 +179,12 @@ func updateService(l *logging.Logger, client *docker.Client, ctx context.Context
 			},
 		},
 		TaskTemplate: swarm.TaskSpec{
+			Placement: &swarm.Placement{
+				Constraints: constraints,
+			},
 			RestartPolicy: &swarm.RestartPolicy{
 				MaxAttempts: &maxAttempt,
+				Condition:   rp,
 			},
 			ContainerSpec: &swarm.ContainerSpec{
 				Image:    service.Spec.TaskTemplate.ContainerSpec.Image,
@@ -210,4 +231,39 @@ func GetEnv(l *logging.Logger, cfg VnfrConfig) []string {
 	}
 	l.Noticef("%s: EnvVar: %v", cfg.Name, envList)
 	return envList
+}
+
+func getNetNameFromId(cl *docker.Client, netId string) (string, error) {
+	nets, _ := cl.NetworkList(ctx, types.NetworkListOptions{})
+	for _, networkResource := range nets {
+		if networkResource.ID == netId {
+			return networkResource.Name, nil
+		}
+	}
+	return "", errors.New(fmt.Sprintf("No network with id %v", netId))
+}
+
+func GetIpsFromService(cli *docker.Client, l *logging.Logger, config *VnfrConfig, vnfr *catalogue.VirtualNetworkFunctionRecord, srv *swarm.Service) (ips []*catalogue.IP, fips []*catalogue.IP, err error) {
+	err = nil
+	fips = make([]*catalogue.IP, 0)
+	ips = make([]*catalogue.IP, 0)
+	l.Debugf("%v", *srv)
+	for _, virtualIP := range (*srv).Endpoint.VirtualIPs {
+		l.Debugf("%v, IP: %v", vnfr.Name, virtualIP)
+		nameFromId, err := getNetNameFromId(cli, virtualIP.NetworkID)
+		if err != nil {
+			return nil, nil, err
+		}
+		ownIp := strings.Split(virtualIP.Addr, "/")[0]
+		config.Own[strings.ToUpper(nameFromId)] = ownIp
+		ips = append(ips, &catalogue.IP{
+			IP:      ownIp,
+			NetName: nameFromId,
+		})
+		//fips = append(fips, &catalogue.IP{
+		//	NetName: nameFromId,
+		//	IP:      strings.Split(strings.Split(vimInstanceChosen.AuthURL, "//")[1], ":")[0],
+		//})
+	}
+	return
 }

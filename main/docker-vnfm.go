@@ -45,7 +45,7 @@ func main() {
 	var h vnfmsdk.HandlerVnfm
 	logger := sdk.GetLogger("docker-vnfm", *level)
 	if *swarm {
-		h = &handler.HandlerVnfmSwarm{
+		h = &handler.VnfmSwarmHandler{
 			Logger:     logger,
 			Tsl:        *tsl,
 			CertFolder: *certFolder,

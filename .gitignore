@@ -74,3 +74,4 @@ fabric.properties
 /go-docker-vnfm
 /badger/
 /badger/**
+/main/badger/

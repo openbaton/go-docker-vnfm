@@ -1,91 +1,58 @@
 package handler
 
 import (
-	"github.com/op/go-logging"
-	"bufio"
-	"strings"
 	"fmt"
+	"bufio"
 	"errors"
-	"encoding/json"
-	"github.com/openbaton/go-openbaton/catalogue"
-	"docker.io/go-docker/api/types"
-	"docker.io/go-docker"
+	"strings"
 	"math/rand"
-	"docker.io/go-docker/api/types/swarm"
 	"runtime/debug"
+	"encoding/json"
+	"docker.io/go-docker"
+	"github.com/op/go-logging"
+	"docker.io/go-docker/api/types"
+	"github.com/openbaton/go-openbaton/catalogue"
 )
 
-type HandlerVnfmSwarm struct {
+type VnfmSwarmHandler struct {
 	Logger     *logging.Logger
 	Tsl        bool
 	CertFolder string
 }
 
-func (h *HandlerVnfmSwarm) ActionForResume(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) catalogue.Action {
+func (h *VnfmSwarmHandler) ActionForResume(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) catalogue.Action {
 	return catalogue.NoActionSpecified
 }
 
-func (h *HandlerVnfmSwarm) CheckInstantiationFeasibility() error {
+func (h *VnfmSwarmHandler) CheckInstantiationFeasibility() error {
 
 	return nil
 }
 
-func (h *HandlerVnfmSwarm) Configure(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) Configure(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmSwarm) HandleError(vnfr *catalogue.VirtualNetworkFunctionRecord) error {
+func (h *VnfmSwarmHandler) HandleError(vnfr *catalogue.VirtualNetworkFunctionRecord) error {
 	h.Logger.Errorf("Recevied Error for vnfr: %v", vnfr.Name)
 	return nil
 }
 
-func (h *HandlerVnfmSwarm) Heal(vnfr *catalogue.VirtualNetworkFunctionRecord, component *catalogue.VNFCInstance, cause string) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) Heal(vnfr *catalogue.VirtualNetworkFunctionRecord, component *catalogue.VNFCInstance, cause string) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmSwarm) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRecord, scripts interface{}, vimInstances map[string][]*catalogue.VIMInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRecord, scripts interface{}, vimInstances map[string][]*catalogue.VIMInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	if vnfr.VDUs == nil {
 		return nil, errors.New("no VDU provided")
 	}
-	config := VnfrConfig{
-		VnfrID:       vnfr.ID,
-		DNSs:         make([]string, 0),
-		PubPort:      make([]string, 0),
-		ExpPort:      make([]string, 0),
-		VimInstance:  make(map[string]*catalogue.VIMInstance),
-		VduService:   make(map[string]swarm.Service),
-		ContainerIDs: make(map[string][]string),
-	}
-	ownConfig := make(map[string]string)
-
-	for _, cp := range vnfr.Configurations.ConfigurationParameters {
-		kLower := strings.ToLower(cp.ConfKey)
-		if strings.Contains(kLower, "cmd") || strings.Contains(kLower, "command") {
-			config.Cmd = strings.Split(cp.Value, " ")
-		} else if strings.Contains(kLower, "publish") {
-			config.PubPort = append(config.PubPort, cp.Value)
-		} else if strings.Contains(kLower, "expose") {
-			config.ExpPort = append(config.ExpPort, cp.Value)
-		} else if kLower == "volumes" {
-			if strings.Contains(cp.Value, ";") {
-				config.Mnts = strings.Split(cp.Value, ";")
-			} else {
-				config.Mnts = []string{cp.Value}
-			}
-
-		} else if strings.Contains(kLower, "dns") {
-			config.DNSs = append(config.DNSs, cp.Value)
-		} else if strings.Contains(kLower, "hostname") {
-			config.BaseHostname = cp.Value
-		} else {
-			ownConfig[cp.ConfKey] = cp.Value
-		}
-	}
-	config.Own = ownConfig
+	config := NewVnfrConfig(vnfr)
+	aliases := FillConfig(vnfr, &config)
 
 	config.NetworkCfg = make(map[string]NetConf)
-	netNames := make([]string, 0)
+
 	pubPorts := make([]string, 0)
+
 	for _, ps := range config.PubPort {
 		split := strings.Split(ps, ":")
 		pubPorts = append(pubPorts, split[0], split[1])
@@ -96,25 +63,8 @@ func (h *HandlerVnfmSwarm) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 		vimInstanceChosen := vimInstances[vdu.ParentVDU][rand.Intn(len(vimInstances[vdu.ParentVDU]))]
 		config.VimInstance[vdu.ID] = vimInstanceChosen
 
-		cps := make([]*catalogue.VNFDConnectionPoint, 0)
-
 		h.Logger.Debugf("%v VNF has %v VNFC(s)", vnfr.Name, len(vdu.VNFCs))
-		for _, cp := range vdu.VNFCs[0].ConnectionPoints {
-			config.NetworkCfg[cp.VirtualLinkReference] = NetConf{
-				IpV4Address: cp.FixedIp,
-			}
-			newCp := &catalogue.VNFDConnectionPoint{
-				VirtualLinkReference: cp.VirtualLinkReference,
-				FloatingIP:           "random",
-				Type:                 "docker",
-				InterfaceID:          0,
-				FixedIp:              cp.FixedIp,
-				ChosenPool:           cp.ChosenPool,
-			}
-			h.Logger.Debugf("Adding New Connection Point: %v", newCp)
-			cps = append(cps, newCp)
-			netNames = append(netNames, cp.VirtualLinkReference)
-		}
+		_, cps, netNames := GetCPsAndIpsFromFixedIps(vdu, h.Logger, vnfr, config)
 		imageChosen, err := chooseImage(vdu, vimInstanceChosen)
 		if err != nil {
 			debug.PrintStack()
@@ -135,44 +85,16 @@ func (h *HandlerVnfmSwarm) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 			h.Logger.Errorf("Error: %v", err)
 			return nil, err
 		}
-		srv, err := createService(h.Logger, cli, ctx, 0, config.ImageName, config.BaseHostname, netIds, pubPorts)
+		srv, err := createService(h.Logger, cli, ctx, 0, config.ImageName, config.BaseHostname, netIds, pubPorts, config.Constraints, aliases)
 		if err != nil {
+			debug.PrintStack()
 			h.Logger.Errorf("Error: %v", err)
 			return nil, err
 		}
 
-		fips := make([]*catalogue.IP, 0)
-		ips := make([]*catalogue.IP, 0)
-		for _, net := range srv.Endpoint.VirtualIPs {
-			h.Logger.Debugf("%v, IP: %v", vnfr.Name, net)
-			nameFromId, err := getNetNameFromId(cli, net.NetworkID)
-			if err != nil {
-				return nil, err
-			}
-			ownIp := strings.Split(net.Addr, "/")[0]
-			config.Own[strings.ToUpper(nameFromId)] = ownIp
-			ips = append(ips, &catalogue.IP{
-				IP:      ownIp,
-				NetName: nameFromId,
-			})
-			//fips = append(fips, &catalogue.IP{
-			//	NetName: nameFromId,
-			//	IP:      strings.Split(strings.Split(vimInstanceChosen.AuthURL, "//")[1], ":")[0],
-			//})
-		}
+		ips, fips, err := GetIpsFromService(cli, h.Logger, &config, vnfr, srv)
 
-		for _, vnfc := range vdu.VNFCs {
-			vdu.VNFCInstances = append(vdu.VNFCInstances, &catalogue.VNFCInstance{
-				VIMID:            vimInstanceChosen.ID,
-				Hostname:         config.BaseHostname,
-				State:            "ACTIVE",
-				VCID:             vnfc.ID,
-				ConnectionPoints: cps,
-				VNFComponent:     vnfc,
-				FloatingIPs:      fips,
-				IPs:              ips,
-			})
-		}
+		SetupVNFCInstance(vdu, vimInstanceChosen, config.BaseHostname, cps, fips, ips)
 
 		config.Name = vnfr.Name
 
@@ -186,27 +108,8 @@ func (h *HandlerVnfmSwarm) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 	}
 	return vnfr, err
 }
-func chooseImage(vdu *catalogue.VirtualDeploymentUnit, vimInstance *catalogue.VIMInstance) (string, error) {
-	for _, img := range vimInstance.Images {
-		for _, imgName := range vdu.VMImages {
-			if img.Name == imgName || img.ID == imgName {
-				return imgName, nil
-			}
-		}
-	}
-	return "", errors.New(fmt.Sprintf("Image with name or id %v not found", vdu.VMImages))
-}
-func getNetNameFromId(cl *docker.Client, netId string) (string, error) {
-	nets, _ := cl.NetworkList(ctx, types.NetworkListOptions{})
-	for _, net := range nets {
-		if net.ID == netId {
-			return net.Name, nil
-		}
-	}
-	return "", errors.New(fmt.Sprintf("No network with id %v", netId))
-}
 
-func (h *HandlerVnfmSwarm) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	js, _ := json.Marshal(dependency)
 	h.Logger.Debugf("DepencencyRecord is: %s", string(js))
 	config := VnfrConfig{}
@@ -243,19 +146,19 @@ func (h *HandlerVnfmSwarm) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, 
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmSwarm) Query() error {
+func (h *VnfmSwarmHandler) Query() error {
 	return nil
 }
 
-func (h *HandlerVnfmSwarm) Resume(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) Resume(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmSwarm) Scale(scaleInOrOut catalogue.Action, vnfr *catalogue.VirtualNetworkFunctionRecord, component catalogue.Component, scripts interface{}, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) Scale(scaleInOrOut catalogue.Action, vnfr *catalogue.VirtualNetworkFunctionRecord, component catalogue.Component, scripts interface{}, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmSwarm) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	cfg := VnfrConfig{}
 	err := getConfig(vnfr.ID, &cfg, h.Logger)
 	if err != nil {
@@ -274,7 +177,7 @@ func (h *HandlerVnfmSwarm) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (
 			vnfcCount += uint64(len(vdu.VNFCs))
 		}
 		service := cfg.VduService[vdu.ID]
-		err = updateService(h.Logger, cli, ctx, &service, vnfcCount, GetEnv(h.Logger, cfg), cfg.Mnts)
+		err = updateService(h.Logger, cli, ctx, &service, vnfcCount, GetEnv(h.Logger, cfg), cfg.Mnts, cfg.Constraints, cfg.RestartPolicy)
 		if err != nil {
 			h.Logger.Errorf("Unable to update: %v", err)
 			//return nil, err
@@ -284,7 +187,7 @@ func (h *HandlerVnfmSwarm) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmSwarm) readLogsFromContainer(cl *docker.Client, contID string, cfg VnfrConfig) {
+func (h *VnfmSwarmHandler) readLogsFromContainer(cl *docker.Client, contID string, cfg VnfrConfig) {
 	logs, _ := cl.ContainerLogs(ctx, contID, types.ContainerLogsOptions{
 		Details:    false,
 		Follow:     false,
@@ -302,19 +205,19 @@ func (h *HandlerVnfmSwarm) readLogsFromContainer(cl *docker.Client, contID strin
 	}
 }
 
-func (h *HandlerVnfmSwarm) StartVNFCInstance(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) StartVNFCInstance(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmSwarm) Stop(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) Stop(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmSwarm) StopVNFCInstance(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) StopVNFCInstance(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmSwarm) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	h.Logger.Noticef("Remove container for vnfr: %v", vnfr.Name)
 	cfg := &VnfrConfig{}
 	err := getConfig(vnfr.ID, cfg, h.Logger)
@@ -336,14 +239,14 @@ func (h *HandlerVnfmSwarm) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecor
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmSwarm) UpdateSoftware(script *catalogue.Script, vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) UpdateSoftware(script *catalogue.Script, vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmSwarm) UpgradeSoftware() error {
+func (h *VnfmSwarmHandler) UpgradeSoftware() error {
 	return nil
 }
 
-func (h *HandlerVnfmSwarm) UserData() string {
+func (h *VnfmSwarmHandler) UserData() string {
 	return ""
 }
