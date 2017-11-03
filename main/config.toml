@@ -1,4 +1,4 @@
 type = "docker"
 endpoint = "docker"
 allocate = true
-workers = 5
+workers = 1

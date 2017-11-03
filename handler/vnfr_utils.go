@@ -69,7 +69,6 @@ func FillConfig(vnfr *catalogue.VirtualNetworkFunctionRecord, config *VnfrConfig
 				netName, als := ExtractAliases(cp.Value)
 				aliases[netName] = als
 			}
-			config.PubPort = append(config.PubPort, cp.Value)
 		} else if strings.Contains(kLower, "expose") {
 			config.ExpPort = append(config.ExpPort, cp.Value)
 		} else if strings.Contains(kLower, "restart_policy_condition") {

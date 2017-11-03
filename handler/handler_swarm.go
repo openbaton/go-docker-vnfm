@@ -85,7 +85,7 @@ func (h *VnfmSwarmHandler) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 			h.Logger.Errorf("Error: %v", err)
 			return nil, err
 		}
-		srv, err := createService(h.Logger, cli, ctx, 0, config.ImageName, config.BaseHostname, netIds, pubPorts, config.Constraints, aliases)
+		srv, err := createService(h.Logger, cli, ctx, 0, config.ImageName, config.BaseHostname, config.Cmd, netIds, pubPorts, config.Constraints, aliases)
 		if err != nil {
 			debug.PrintStack()
 			h.Logger.Errorf("Error: %v", err)

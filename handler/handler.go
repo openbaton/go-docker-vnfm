@@ -64,10 +64,9 @@ func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionReco
 	FillConfig(vnfr, &config)
 
 	pubPorts := make([]string, 0)
-	for _, ps := range config.PubPort {
-		split := strings.Split(ps, ":")
-		h.Logger.Debugf("Ports: %d --> %d", split[0], split[1])
-		pubPorts = append(pubPorts, split[0], split[1])
+	for _, ps := range config.ExpPort {
+		h.Logger.Debugf("Ports: %v", ps)
+		pubPorts = append(pubPorts, ps)
 	}
 
 	for _, vdu := range vnfr.VDUs {
@@ -239,15 +238,30 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.Vi
 	networkingConfig := network.NetworkingConfig{
 		EndpointsConfig: firstCfg,
 	}
-	pBinds := make(nat.PortSet)
+
+	portBindings := make(nat.PortMap)
+
+	expPorts := make(nat.PortSet)
 	for _, v := range cfg.PubPort {
-		p, _ := nat.NewPort("tcp", v)
-		pBinds[p] = struct{}{}
+		port, err := nat.NewPort("tcp", v)
+		if err != nil {
+			debug.PrintStack()
+			return nil, err
+		}
+		expPorts[port] = struct{}{}
+		portBindings[port] = []nat.PortBinding{{
+			HostIP:"0.0.0.0",
+			HostPort: port.Port(),
+		},
+		}
 	}
 	hostCfg := container.HostConfig{
-		DNS:    cfg.DNSs,
-		CapAdd: []string{"NET_ADMIN", "SYS_ADMIN"},
-		Mounts: mounts,
+		DNS:          cfg.DNSs,
+		CapAdd:       []string{"NET_ADMIN", "SYS_ADMIN"},
+		Mounts:       mounts,
+		PortBindings: portBindings,
+
+		PublishAllPorts:true,
 	}
 	envList := GetEnv(h.Logger, cfg)
 
@@ -255,11 +269,11 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.Vi
 	h.Logger.Noticef("%s: Image: %v", cfg.Name, cfg.ImageName)
 
 	config := &container.Config{
-		Image: cfg.ImageName,
-		Env:   envList,
-		//ExposedPorts: pBinds,
-		Hostname: cfg.Name,
-		Cmd:      cfg.Cmd,
+		Image:        cfg.ImageName,
+		Env:          envList,
+		ExposedPorts: expPorts,
+		Hostname:     cfg.Name,
+		Cmd:          cfg.Cmd,
 	}
 
 	resp, err := cl.ContainerCreate(ctx, config, &hostCfg, &networkingConfig, cfg.Name)

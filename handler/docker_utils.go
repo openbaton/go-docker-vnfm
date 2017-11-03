@@ -18,6 +18,7 @@ import (
 	"docker.io/go-docker/api/types/mount"
 	"github.com/docker/go-connections/tlsconfig"
 	"github.com/openbaton/go-openbaton/catalogue"
+	"runtime/debug"
 )
 
 func getClient(instance *catalogue.VIMInstance, certDirectory string, tsl bool) (*docker.Client, error) {
@@ -50,7 +51,7 @@ func getClient(instance *catalogue.VIMInstance, certDirectory string, tsl bool) 
 	return cli, err
 }
 
-func createService(l *logging.Logger, client *docker.Client, ctx context.Context, replicas uint64, image, baseHostname string, networkIds, pubPorts, constraints []string, aliases map[string][]string) (*swarm.Service, error) {
+func createService(l *logging.Logger, client *docker.Client, ctx context.Context, replicas uint64, image, baseHostname string, cmd, networkIds, pubPorts, constraints []string, aliases map[string][]string) (*swarm.Service, error) {
 	networks := make([]swarm.NetworkAttachmentConfig, 0)
 	for _, netId := range networkIds {
 		netName, err := getNetNameFromId(client, netId)
@@ -61,9 +62,10 @@ func createService(l *logging.Logger, client *docker.Client, ctx context.Context
 		var als []string
 		if val, ok := aliases[netName]; ok {
 			als = val
-		} else {
-			als = []string{fmt.Sprintf("%s.%s", baseHostname, netName), baseHostname}
 		}
+		//} else {
+		//	als = []string{fmt.Sprintf("%s.%s", baseHostname, netName), baseHostname}
+		//}
 		l.Debugf("Adding aliases %v --> %v", baseHostname, als)
 		networks = append(networks, swarm.NetworkAttachmentConfig{
 			Target:  netId,
@@ -98,8 +100,14 @@ func createService(l *logging.Logger, client *docker.Client, ctx context.Context
 		},
 		TaskTemplate: swarm.TaskSpec{
 			ContainerSpec: &swarm.ContainerSpec{
+				Command:  cmd,
 				Image:    image,
 				Hostname: baseHostname,
+				//Privileges: &swarm.Privileges{
+				//	SELinuxContext: &swarm.SELinuxContext{
+				//		Disable: true,
+				//	},
+				//},
 			},
 			Networks: networks,
 			Placement: &swarm.Placement{
@@ -116,10 +124,12 @@ func createService(l *logging.Logger, client *docker.Client, ctx context.Context
 	}
 	resp, err := client.ServiceCreate(ctx, serviceSpec, serviceCreateOptions)
 	if err != nil {
+		debug.PrintStack()
 		return nil, err
 	}
 	srv, err := waitUntilIp(client, ctx, resp.ID)
 	if err != nil {
+		debug.PrintStack()
 		return nil, err
 	}
 	return srv, nil
