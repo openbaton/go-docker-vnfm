@@ -242,7 +242,9 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.Vi
 	portBindings := make(nat.PortMap)
 
 	expPorts := make(nat.PortSet)
+	var pubAllPort bool = false
 	for _, v := range cfg.PubPort {
+		pubAllPort = true
 		port, err := nat.NewPort("tcp", v)
 		if err != nil {
 			debug.PrintStack()
@@ -250,7 +252,7 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.Vi
 		}
 		expPorts[port] = struct{}{}
 		portBindings[port] = []nat.PortBinding{{
-			HostIP:"0.0.0.0",
+			HostIP:   "0.0.0.0",
 			HostPort: port.Port(),
 		},
 		}
@@ -261,7 +263,7 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.Vi
 		Mounts:       mounts,
 		PortBindings: portBindings,
 
-		PublishAllPorts:true,
+		PublishAllPorts: pubAllPort,
 	}
 	envList := GetEnv(h.Logger, cfg)
 
