@@ -1,0 +1,19 @@
+name: iperfclient
+description: Iper Client
+vendor: fokus
+nfvo_version: 5.0.0
+vim_types:
+ - docker
+image:
+    upload: "check"
+    names:
+        - "openbaton/iperfclient:latest"
+    link: "openbaton/iperfclient:latest"
+image-config:
+    name: "openbaton/iperfclient:latest"
+    diskFormat: QCOW2
+    containerFormat: BARE
+    minCPU: 2
+    minDisk: 5
+    minRam: 2048
+    isPublic: false

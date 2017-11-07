@@ -6,4 +6,4 @@ RUN apk update && apk add iperf
 ENV SERVER_MGMT ''
 ENV TIME '150'
 #CMD iperf -c $SERVER_MGMT -t 150
-ENTRYPOINT echo "Connecting to $SERVER_MGMT" && iperf -c "$SERVER_MGMT"
+ENTRYPOINT echo "Connecting to iperfserver" && iperf -c iperfserver
