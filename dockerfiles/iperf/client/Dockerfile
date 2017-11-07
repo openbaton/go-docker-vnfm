@@ -1,7 +1,9 @@
-FROM ubuntu:16.04
+FROM alpine:3.6
 
 EXPOSE 5001
 
-RUN apt update && apt install iperf
-
-CMD iperf -c $SERVER_PRIVATE_FLOATINGIP -t 150
+RUN apk update && apk add iperf
+ENV SERVER_MGMT ''
+ENV TIME '150'
+#CMD iperf -c $SERVER_MGMT -t 150
+ENTRYPOINT echo "Connecting to $SERVER_MGMT" && iperf -c "$SERVER_MGMT"

@@ -1,7 +1,7 @@
-FROM ubuntu:16.04
+FROM alpine:3.6
 
 EXPOSE 5001
 
-RUN apt update && apt install iperf
+RUN apk update && apk add iperf
 
 ENTRYPOINT ["iperf", "-s"]
