@@ -42,7 +42,7 @@ func (h *VnfmSwarmHandler) Heal(vnfr *catalogue.VirtualNetworkFunctionRecord, co
 	return vnfr, nil
 }
 
-func (h *VnfmSwarmHandler) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRecord, scripts interface{}, vimInstances map[string][]*catalogue.VIMInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmSwarmHandler) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRecord, scripts interface{}, vimInstances map[string][]interface{}) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	if vnfr.VDUs == nil {
 		return nil, errors.New("no VDU provided")
 	}
@@ -61,11 +61,12 @@ func (h *VnfmSwarmHandler) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 	for _, vdu := range vnfr.VDUs {
 		vdu.VNFCInstances = make([]*catalogue.VNFCInstance, 0)
 		vimInstanceChosen := vimInstances[vdu.ParentVDU][rand.Intn(len(vimInstances[vdu.ParentVDU]))]
-		config.VimInstance[vdu.ID] = vimInstanceChosen
+		dockerVimInstance := vimInstanceChosen.(*catalogue.DockerVimInstance)
+		config.VimInstance[vdu.ID] = dockerVimInstance
 
 		h.Logger.Debugf("%v VNF has %v VNFC(s)", vnfr.Name, len(vdu.VNFCs))
 		_, cps, netNames := GetCPsAndIpsFromFixedIps(vdu, h.Logger, vnfr, config)
-		imageChosen, err := chooseImage(vdu, vimInstanceChosen)
+		imageChosen, err := chooseImage(vdu, dockerVimInstance)
 		if err != nil {
 			debug.PrintStack()
 			return nil, err
@@ -75,7 +76,7 @@ func (h *VnfmSwarmHandler) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 		if config.BaseHostname == "" {
 			config.BaseHostname = fmt.Sprintf("%s", vnfr.Name)
 		}
-		cli, err := getClient(vimInstanceChosen, h.CertFolder, h.Tsl)
+		cli, err := getClient(dockerVimInstance, h.CertFolder, h.Tsl)
 		if err != nil {
 			h.Logger.Errorf("Error: %v", err)
 			return nil, err
@@ -94,7 +95,7 @@ func (h *VnfmSwarmHandler) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 
 		ips, fips, err := GetIpsFromService(cli, h.Logger, &config, vnfr, srv)
 
-		SetupVNFCInstance(vdu, vimInstanceChosen, config.BaseHostname, cps, fips, ips)
+		SetupVNFCInstance(vdu, dockerVimInstance, config.BaseHostname, cps, fips, ips)
 
 		config.Name = vnfr.Name
 

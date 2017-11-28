@@ -56,7 +56,7 @@ func (h *HandlerVnfmImpl) Heal(vnfr *catalogue.VirtualNetworkFunctionRecord, com
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRecord, scripts interface{}, vimInstances map[string][]*catalogue.VIMInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRecord, scripts interface{}, vimInstances map[string][]interface{}) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	if vnfr.VDUs == nil {
 		return nil, errors.New("no VDU provided")
 	}
@@ -72,13 +72,14 @@ func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionReco
 	for _, vdu := range vnfr.VDUs {
 		vdu.VNFCInstances = make([]*catalogue.VNFCInstance, 0)
 		vimInstanceChosen := vimInstances[vdu.ParentVDU][rand.Intn(len(vimInstances[vdu.ParentVDU]))]
-		config.VimInstance[vdu.ID] = vimInstanceChosen
+		dockerVimInstance := vimInstanceChosen.(*catalogue.DockerVimInstance)
+		config.VimInstance[vdu.ID] = dockerVimInstance
 
 		h.Logger.Debugf("%v VNF has %v VNFC(s)", vnfr.Name, len(vdu.VNFCs))
 
 		ips, cps, _ := GetCPsAndIpsFromFixedIps(vdu, h.Logger, vnfr, config)
 
-		imageChosen, err := chooseImage(vdu, vimInstanceChosen)
+		imageChosen, err := chooseImage(vdu, dockerVimInstance)
 		hostname := fmt.Sprintf("%s", vnfr.Name)
 		if err != nil {
 			debug.PrintStack()
@@ -86,7 +87,7 @@ func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionReco
 		}
 		config.ImageName = imageChosen
 
-		SetupVNFCInstance(vdu, vimInstanceChosen, hostname, cps, nil, ips)
+		SetupVNFCInstance(vdu, dockerVimInstance, hostname, cps, nil, ips)
 
 		config.Name = vnfr.Name
 	}

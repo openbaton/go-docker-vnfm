@@ -32,7 +32,7 @@ type VnfrConfig struct {
 	Own           map[string]string
 	NetworkCfg    map[string]NetConf
 	Foreign       map[string][]map[string]string
-	VimInstance   map[string]*catalogue.VIMInstance
+	VimInstance   map[string]*catalogue.DockerVimInstance
 	VduService    map[string]swarm.Service
 }
 
@@ -43,7 +43,7 @@ func NewVnfrConfig(vnfr *catalogue.VirtualNetworkFunctionRecord) VnfrConfig {
 		PubPort:      make([]string, 0),
 		ExpPort:      make([]string, 0),
 		Constraints:  make([]string, 0),
-		VimInstance:  make(map[string]*catalogue.VIMInstance),
+		VimInstance:  make(map[string]*catalogue.DockerVimInstance),
 		ContainerIDs: make(map[string][]string),
 		Own:          make(map[string]string),
 		NetworkCfg:   make(map[string]NetConf),
@@ -107,15 +107,23 @@ func ExtractAliases(val string) (string, []string) {
 	return alias[0], alPerNet
 }
 
-func chooseImage(vdu *catalogue.VirtualDeploymentUnit, vimInstance *catalogue.VIMInstance) (string, error) {
+func chooseImage(vdu *catalogue.VirtualDeploymentUnit, vimInstance *catalogue.DockerVimInstance) (string, error) {
 	for _, img := range vimInstance.Images {
 		for _, imgName := range vdu.VMImages {
-			if img.Name == imgName || img.ID == imgName {
+			if img.ID == imgName || arrayContains(img.Tags, imgName) {
 				return imgName, nil
 			}
 		}
 	}
 	return "", errors.New(fmt.Sprintf("Image with name or id %v not found", vdu.VMImages))
+}
+func arrayContains(list []string, str string) bool {
+	for _,val := range list{
+		if val == str{
+			return true
+		}
+	}
+	return false
 }
 
 func GetCPsAndIpsFromFixedIps(vdu *catalogue.VirtualDeploymentUnit, l *logging.Logger, vnfr *catalogue.VirtualNetworkFunctionRecord, config VnfrConfig) ([]*catalogue.IP, []*catalogue.VNFDConnectionPoint, []string) {
@@ -147,7 +155,7 @@ func GetCPsAndIpsFromFixedIps(vdu *catalogue.VirtualDeploymentUnit, l *logging.L
 	return ips, cps, netNames
 }
 
-func SetupVNFCInstance(vdu *catalogue.VirtualDeploymentUnit, vimInstanceChosen *catalogue.VIMInstance, hostname string, cps []*catalogue.VNFDConnectionPoint, fips []*catalogue.IP, ips []*catalogue.IP) {
+func SetupVNFCInstance(vdu *catalogue.VirtualDeploymentUnit, vimInstanceChosen *catalogue.DockerVimInstance, hostname string, cps []*catalogue.VNFDConnectionPoint, fips []*catalogue.IP, ips []*catalogue.IP) {
 	for _, vnfc := range vdu.VNFCs {
 		vdu.VNFCInstances = append(vdu.VNFCInstances, &catalogue.VNFCInstance{
 			VIMID:            vimInstanceChosen.ID,
