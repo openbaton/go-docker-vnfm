@@ -21,7 +21,7 @@
     }],
     "vdu": [{
       "vm_image": [
-        "iperfserver:latest"
+        "openbaton/iperfserver:latest"
       ],
       "scale_in_out": 2,
       "vnfc": [{
@@ -51,7 +51,7 @@
     }],
     "vdu": [{
       "vm_image": [
-        "iperfclient:latest"
+        "openbaton/iperfclient:latest"
       ],
       "scale_in_out": 2,
       "vnfc": [{

@@ -21,11 +21,11 @@ import (
 	"runtime/debug"
 )
 
-func getClient(instance *catalogue.VIMInstance, certDirectory string, tsl bool) (*docker.Client, error) {
+func getClient(instance *catalogue.DockerVimInstance, certDirectory string, tsl bool) (*docker.Client, error) {
 	var cli *docker.Client
 	var err error
 	if strings.HasPrefix(instance.AuthURL, "unix:") {
-		cli, err = docker.NewClient(instance.AuthURL, instance.Tenant, nil, nil)
+		cli, err = docker.NewClient(instance.AuthURL, api.DefaultVersion, nil, nil)
 	} else {
 		var tlsc *tls.Config
 		if tsl {
