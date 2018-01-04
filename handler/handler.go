@@ -243,7 +243,7 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.Vi
 	portBindings := make(nat.PortMap)
 
 	expPorts := make(nat.PortSet)
-	var pubAllPort bool = false
+	var pubAllPort = false
 	for _, v := range cfg.PubPort {
 		pubAllPort = true
 		port, err := nat.NewPort("tcp", v)
@@ -268,7 +268,6 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.Vi
 	}
 	envList := GetEnv(h.Logger, cfg)
 
-	//h.Logger.Noticef("%s: EnvVar: %v", cfg.Name, envList)
 	h.Logger.Noticef("%s: Image: %v", cfg.Name, cfg.ImageName)
 
 	config := &container.Config{

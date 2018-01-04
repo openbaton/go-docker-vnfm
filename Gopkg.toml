@@ -30,8 +30,5 @@
   version = "0.8.0"
 
 [[constraint]]
-  name = "github.com/docker/go-connections"
-  version = "0.3.0"
-[[constraint]]
   name = "github.com/openbaton/go-openbaton"
-  version = "master"
+  version = "*"
