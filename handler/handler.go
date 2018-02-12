@@ -278,7 +278,7 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.Vi
 		Cmd:          cfg.Cmd,
 	}
 
-	resp, err := cl.ContainerCreate(ctx, config, &hostCfg, &networkingConfig, cfg.Name)
+	resp, err := cl.ContainerCreate(ctx, config, &hostCfg, &networkingConfig, fmt.Sprintf("%s-%d", cfg.Name, randInt(1000, 9999)))
 	if err != nil {
 		return nil, err
 	}
@@ -300,6 +300,11 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.Vi
 
 	go h.readLogsFromContainer(cl, resp.ID, cfg)
 	return &resp, nil
+}
+
+func randInt(min int, max int) int {
+	rand.Seed(time.Now().UTC().UnixNano())
+	return min + rand.Intn(max-min)
 }
 
 func (h *HandlerVnfmImpl) readLogsFromContainer(cl *docker.Client, contID string, cfg VnfrConfig) {
