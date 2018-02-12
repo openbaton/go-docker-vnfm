@@ -31,4 +31,4 @@
 
 [[constraint]]
   name = "github.com/openbaton/go-openbaton"
-  version = "*"
+  branch = "master"
