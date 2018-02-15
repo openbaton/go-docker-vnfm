@@ -65,7 +65,16 @@ func (h *VnfmSwarmHandler) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 		config.VimInstance[vdu.ID] = dockerVimInstance
 
 		h.Logger.Debugf("%v VNF has %v VNFC(s)", vnfr.Name, len(vdu.VNFCs))
-		_, cps, netNames := GetCPsAndIpsFromFixedIps(vdu, h.Logger, vnfr, config)
+		cli, err := getClient(dockerVimInstance, h.CertFolder, h.Tsl)
+		if err != nil {
+			h.Logger.Errorf("Error: %v", err)
+			return nil, err
+		}
+		_, cps, netNames, err := GetCPsAndIpsFromFixedIps(cli, vdu, h.Logger, vnfr, config)
+		if err != nil {
+			h.Logger.Errorf("Error: %v", err)
+			return nil, err
+		}
 		imageChosen, err := chooseImage(vdu, dockerVimInstance)
 		if err != nil {
 			debug.PrintStack()
@@ -76,11 +85,7 @@ func (h *VnfmSwarmHandler) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 		if config.BaseHostname == "" {
 			config.BaseHostname = fmt.Sprintf("%s", vnfr.Name)
 		}
-		cli, err := getClient(dockerVimInstance, h.CertFolder, h.Tsl)
-		if err != nil {
-			h.Logger.Errorf("Error: %v", err)
-			return nil, err
-		}
+
 		netIds, err := getNetworkIdsFromNames(cli, netNames)
 		if err != nil {
 			h.Logger.Errorf("Error: %v", err)

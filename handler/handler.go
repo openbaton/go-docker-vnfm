@@ -77,8 +77,17 @@ func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionReco
 
 		h.Logger.Debugf("%v VNF has %v VNFC(s)", vnfr.Name, len(vdu.VNFCs))
 
-		ips, cps, _ := GetCPsAndIpsFromFixedIps(vdu, h.Logger, vnfr, config)
+		cl, err := getClient(dockerVimInstance, h.CertFolder, h.Tsl)
+		if err != nil {
+			h.Logger.Errorf("Error while getting client: %v", err)
+			return nil, err
+		}
+		ips, cps, _, err := GetCPsAndIpsFromFixedIps(cl, vdu, h.Logger, vnfr, config)
 
+		if err != nil {
+			h.Logger.Errorf("Error while getting CP: %v", err)
+			return nil, err
+		}
 		imageChosen, err := chooseImage(vdu, dockerVimInstance)
 		hostname := fmt.Sprintf("%s", vnfr.Name)
 		if err != nil {
@@ -174,7 +183,7 @@ func (h *HandlerVnfmImpl) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*
 		return nil, err
 	}
 	for _, vdu := range vnfr.VDUs {
-		resp, err := h.dockerStartContainer(cfg, vdu)
+		resp, err := h.startContainer(cfg, vdu)
 		if err != nil {
 			return nil, err
 		}
@@ -184,9 +193,13 @@ func (h *HandlerVnfmImpl) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.VirtualDeploymentUnit) (*container.ContainerCreateCreatedBody, error) {
+func (h *HandlerVnfmImpl) startContainer(cfg VnfrConfig, vdu *catalogue.VirtualDeploymentUnit) (*container.ContainerCreateCreatedBody, error) {
 
 	cl, err := getClient(cfg.VimInstance[vdu.ID], h.CertFolder, h.Tsl)
+	if err != nil {
+		h.Logger.Errorf("Error while getting client: %v", err)
+		return nil, err
+	}
 	mounts := make([]mount.Mount, len(cfg.Mnts))
 
 	for i, mnt := range cfg.Mnts {
@@ -203,22 +216,23 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.Vi
 			Type:     mount.TypeBind,
 		}
 	}
-	if err != nil {
-		h.Logger.Errorf("Error while getting client: %v", err)
-		return nil, err
-	}
+
 	endCfg := make(map[string]*network.EndpointSettings)
-	for netName, values := range cfg.NetworkCfg {
-		hostnames := []string{fmt.Sprintf("%s.%s", cfg.Name, netName)}
-		h.Logger.Debugf("%v: Network %v --> %v, %v", cfg.Name, netName, values.IpV4Address, hostnames)
-		netIds, _ := getNetworkIdsFromNames(cl, []string{netName})
-		endCfg[netName] = &network.EndpointSettings{
+	for netId, values := range cfg.NetworkCfg {
+		net, err := cl.NetworkInspect(ctx, netId, types.NetworkInspectOptions{})
+		if err != nil {
+			h.Logger.Errorf("Network with id [%s] not found", netId)
+			return nil, err
+		}
+		aliases := []string{fmt.Sprintf("%s.%s", cfg.Name, strings.Split(net.Name, "_")[0])}
+		h.Logger.Debugf("%v: Network %v --> %v, %v", cfg.Name, net.Name, values.IpV4Address, aliases)
+		endCfg[net.Name] = &network.EndpointSettings{
 			IPAddress: values.IpV4Address,
-			Aliases:   hostnames,
+			Aliases:   aliases,
 			IPAMConfig: &network.EndpointIPAMConfig{
 				IPv4Address: values.IpV4Address,
 			},
-			NetworkID: netIds[0],
+			NetworkID: netId,
 		}
 	}
 	firstCfg := make(map[string]*network.EndpointSettings)
@@ -277,6 +291,8 @@ func (h *HandlerVnfmImpl) dockerStartContainer(cfg VnfrConfig, vdu *catalogue.Vi
 		Hostname:     cfg.Name,
 		Cmd:          cfg.Cmd,
 	}
+
+	h.Logger.Debugf("NetworkConfig is %+v", networkingConfig)
 
 	resp, err := cl.ContainerCreate(ctx, config, &hostCfg, &networkingConfig, fmt.Sprintf("%s-%d", cfg.Name, randInt(1000, 9999)))
 	if err != nil {

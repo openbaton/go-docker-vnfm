@@ -8,6 +8,8 @@ import (
 	"docker.io/go-docker/api/types/swarm"
 	"docker.io/go-docker/api/types/strslice"
 	"github.com/openbaton/go-openbaton/catalogue"
+	"docker.io/go-docker"
+	"docker.io/go-docker/api/types"
 )
 
 type Aliases map[string][]string
@@ -118,32 +120,45 @@ func chooseImage(vdu *catalogue.VirtualDeploymentUnit, vimInstance *catalogue.Do
 	return "", errors.New(fmt.Sprintf("Image with name or id %v not found", vdu.VMImages))
 }
 func arrayContains(list []string, str string) bool {
-	for _,val := range list{
-		if val == str{
+	for _, val := range list {
+		if val == str {
 			return true
 		}
 	}
 	return false
 }
 
-func GetCPsAndIpsFromFixedIps(vdu *catalogue.VirtualDeploymentUnit, l *logging.Logger, vnfr *catalogue.VirtualNetworkFunctionRecord, config VnfrConfig) ([]*catalogue.IP, []*catalogue.VNFDConnectionPoint, []string) {
+func GetCPsAndIpsFromFixedIps(cl *docker.Client, vdu *catalogue.VirtualDeploymentUnit, l *logging.Logger, vnfr *catalogue.VirtualNetworkFunctionRecord, config VnfrConfig) ([]*catalogue.IP, []*catalogue.VNFDConnectionPoint, []string, error) {
 	netNames := make([]string, 0)
 	cps := make([]*catalogue.VNFDConnectionPoint, 0)
 	ips := make([]*catalogue.IP, 0)
 	for _, cp := range vdu.VNFCs[0].ConnectionPoints {
-		l.Debugf("%s: Fixed Ip is: %v", vnfr.Name, cp.FixedIp)
-		config.NetworkCfg[cp.VirtualLinkReference] = NetConf{
+		if cp.FixedIp != "" {
+			l.Debugf("%s: Fixed Ip is: %v", vnfr.Name, cp.FixedIp)
+		}
+		config.NetworkCfg[cp.VirtualLinkReferenceId] = NetConf{
 			IpV4Address: cp.FixedIp,
 		}
+		var netName string
+		if cp.VirtualLinkReferenceId != "" {
+			netDoc, err := cl.NetworkInspect(ctx, cp.VirtualLinkReferenceId, types.NetworkInspectOptions{})
+			if err != nil {
+				l.Errorf("Network with id [%s] not found", cp.VirtualLinkReferenceId)
+				return nil, nil, nil, errors.New(fmt.Sprintf("Network with id [%s] not found", cp.VirtualLinkReferenceId))
+			}
+			netName = netDoc.Name
+		} else {
+			netName = cp.VirtualLinkReference
+		}
 		newCp := &catalogue.VNFDConnectionPoint{
-			VirtualLinkReference: cp.VirtualLinkReference,
+			VirtualLinkReference: netName,
 			FloatingIP:           "random",
 			Type:                 "docker",
 			InterfaceID:          0,
 			FixedIp:              cp.FixedIp,
 			ChosenPool:           cp.ChosenPool,
 		}
-		l.Debugf("Adding New Connection Point: %v", newCp)
+		l.Debugf("Adding New Connection Point: %+v", newCp)
 		cps = append(cps, newCp)
 		netNames = append(netNames, cp.VirtualLinkReference)
 		ips = append(ips, &catalogue.IP{
@@ -152,7 +167,7 @@ func GetCPsAndIpsFromFixedIps(vdu *catalogue.VirtualDeploymentUnit, l *logging.L
 		})
 		config.Own[strings.ToUpper(cp.VirtualLinkReference)] = cp.FixedIp
 	}
-	return ips, cps, netNames
+	return ips, cps, netNames, nil
 }
 
 func SetupVNFCInstance(vdu *catalogue.VirtualDeploymentUnit, vimInstanceChosen *catalogue.DockerVimInstance, hostname string, cps []*catalogue.VNFDConnectionPoint, fips []*catalogue.IP, ips []*catalogue.IP) {
