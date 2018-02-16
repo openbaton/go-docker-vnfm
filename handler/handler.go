@@ -225,7 +225,7 @@ func (h *HandlerVnfmImpl) startContainer(cfg VnfrConfig, vdu *catalogue.VirtualD
 			return nil, err
 		}
 		aliases := []string{fmt.Sprintf("%s.%s", cfg.Name, strings.Split(net.Name, "_")[0])}
-		h.Logger.Debugf("%v: Network %v --> %v, %v", cfg.Name, net.Name, values.IpV4Address, aliases)
+		h.Logger.Debugf("%s: Aliases: %v", cfg.Name, aliases)
 		endCfg[net.Name] = &network.EndpointSettings{
 			IPAddress: values.IpV4Address,
 			Aliases:   aliases,
