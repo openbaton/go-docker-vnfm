@@ -28,6 +28,7 @@ func main() {
 	var brokerPort = flag.Int("port", 5672, "The Broker Port")
 	var workers = flag.Int("workers", 5, "The number of workers")
 	var allocate = flag.Bool("allocate", true, "if the docker vnfm must allocate resources (must be true)")
+	var timeout = flag.Int("timeout", 2, "Timeout of the Dial function")
 
 	flag.Parse()
 	pathExists, err := exists(*dirPath)
@@ -62,7 +63,7 @@ func main() {
 	if *configFile != "" {
 		vnfmsdk.Start(*configFile, h, "docker")
 	} else {
-		vnfmsdk.StartWithConfig(*typ, *description, *username, *password, *level, *brokerIp, *brokerPort, *workers, *allocate, h, *name)
+		vnfmsdk.StartWithConfig(*typ, *description, *username, *password, *level, *brokerIp, *brokerPort, *workers, *timeout, *allocate, h, *name)
 	}
 }
 
