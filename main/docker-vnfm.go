@@ -51,7 +51,7 @@ func main() {
 			CertFolder: *certFolder,
 		}
 	} else {
-		h = &handler.HandlerVnfmImpl{
+		h = &handler.VnfmImpl{
 			Logger:     logger,
 			Tsl:        *tsl,
 			CertFolder: *certFolder,

@@ -28,35 +28,35 @@ var (
 	ctx = context.Background()
 )
 
-type HandlerVnfmImpl struct {
+type VnfmImpl struct {
 	Logger     *logging.Logger
 	Tsl        bool
 	CertFolder string
 }
 
-func (h *HandlerVnfmImpl) ActionForResume(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) catalogue.Action {
+func (h *VnfmImpl) ActionForResume(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) catalogue.Action {
 	return catalogue.NoActionSpecified
 }
 
-func (h *HandlerVnfmImpl) CheckInstantiationFeasibility() error {
+func (h *VnfmImpl) CheckInstantiationFeasibility() error {
 
 	return nil
 }
 
-func (h *HandlerVnfmImpl) Configure(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) Configure(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) HandleError(vnfr *catalogue.VirtualNetworkFunctionRecord) error {
+func (h *VnfmImpl) HandleError(vnfr *catalogue.VirtualNetworkFunctionRecord) error {
 	h.Logger.Errorf("Recevied Error for vnfr: %v", vnfr.Name)
 	return nil
 }
 
-func (h *HandlerVnfmImpl) Heal(vnfr *catalogue.VirtualNetworkFunctionRecord, component *catalogue.VNFCInstance, cause string) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) Heal(vnfr *catalogue.VirtualNetworkFunctionRecord, component *catalogue.VNFCInstance, cause string) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRecord, scripts interface{}, vimInstances map[string][]interface{}) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRecord, scripts interface{}, vimInstances map[string][]interface{}) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	if vnfr.VDUs == nil {
 		return nil, errors.New("no VDU provided")
 	}
@@ -126,7 +126,7 @@ func getNetworkIdsFromNames(cli *docker.Client, netNames []string) ([]string, er
 	return res, nil
 }
 
-func (h *HandlerVnfmImpl) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	js, _ := json.Marshal(dependency)
 	h.Logger.Debugf("DepencencyRecord is: %s", string(js))
 	config := VnfrConfig{}
@@ -163,19 +163,36 @@ func (h *HandlerVnfmImpl) Modify(vnfr *catalogue.VirtualNetworkFunctionRecord, d
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) Query() error {
+func (h *VnfmImpl) Query() error {
 	return nil
 }
 
-func (h *HandlerVnfmImpl) Resume(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) Resume(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) Scale(scaleInOrOut catalogue.Action, vnfr *catalogue.VirtualNetworkFunctionRecord, component catalogue.Component, scripts interface{}, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) Scale(scaleInOrOut catalogue.Action, vnfr *catalogue.VirtualNetworkFunctionRecord, component catalogue.Component, scripts interface{}, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
+	switch scaleInOrOut {
+	case catalogue.ActionScaleOut:
+		cfg := VnfrConfig{}
+		getConfig(vnfr.ID, &cfg, h.Logger)
+		//TODO handle the case with multiple VDU!
+		switch t := component.(type) {
+		case *catalogue.VNFCInstance:
+			id, err := h.startContainer(cfg, vnfr.VDUs[0].ID, firstNet(t))
+			if err != nil {
+				return nil, err
+			}
+			t.VCID = id
+		default:
+			return nil, errors.New(fmt.Sprintf("Received type %T but VNFCInstance required", t))
+		}
+	case catalogue.ActionScaleIn:
+	}
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	cfg := VnfrConfig{}
 	err := getConfig(vnfr.ID, &cfg, h.Logger)
 	if err != nil {
@@ -183,22 +200,24 @@ func (h *HandlerVnfmImpl) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*
 		return nil, err
 	}
 	for _, vdu := range vnfr.VDUs {
-		resp, err := h.startContainer(cfg, vdu)
-		if err != nil {
-			return nil, err
+		for _, vnfc := range vdu.VNFCInstances {
+			id, err := h.startContainer(cfg, vdu.ID, firstNet(vnfc))
+			if err != nil {
+				return nil, err
+			}
+			vnfc.VCID = id
 		}
-		cfg.ContainerIDs[vdu.ID] = append(cfg.ContainerIDs[vdu.ID], resp.ID)
 	}
 	SaveConfig(vnfr.ID, cfg, h.Logger)
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) startContainer(cfg VnfrConfig, vdu *catalogue.VirtualDeploymentUnit) (*container.ContainerCreateCreatedBody, error) {
+func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName string) (string, error) {
 
-	cl, err := getClient(cfg.VimInstance[vdu.ID], h.CertFolder, h.Tsl)
+	cl, err := getClient(cfg.VimInstance[vduID], h.CertFolder, h.Tsl)
 	if err != nil {
 		h.Logger.Errorf("Error while getting client: %v", err)
-		return nil, err
+		return "", err
 	}
 	mounts := make([]mount.Mount, len(cfg.Mnts))
 
@@ -222,7 +241,7 @@ func (h *HandlerVnfmImpl) startContainer(cfg VnfrConfig, vdu *catalogue.VirtualD
 		net, err := cl.NetworkInspect(ctx, netId, types.NetworkInspectOptions{})
 		if err != nil {
 			h.Logger.Errorf("Network with id [%s] not found", netId)
-			return nil, err
+			return "", err
 		}
 		aliases := []string{fmt.Sprintf("%s.%s", cfg.Name, strings.Split(net.Name, "_")[0])}
 		h.Logger.Debugf("%s: Aliases: %v", cfg.Name, aliases)
@@ -235,17 +254,8 @@ func (h *HandlerVnfmImpl) startContainer(cfg VnfrConfig, vdu *catalogue.VirtualD
 			NetworkID: netId,
 		}
 	}
+
 	firstCfg := make(map[string]*network.EndpointSettings)
-	x := math.MaxInt64
-	var firstNetName string
-	for _, vnfc := range vdu.VNFCs {
-		for _, cp := range vnfc.ConnectionPoints {
-			if cp.InterfaceID < x {
-				firstNetName = cp.VirtualLinkReference
-				x = cp.InterfaceID
-			}
-		}
-	}
 	h.Logger.Debugf("%s: First network is: %s", cfg.Name, firstNetName)
 	firstCfg[firstNetName] = endCfg[firstNetName]
 
@@ -263,7 +273,7 @@ func (h *HandlerVnfmImpl) startContainer(cfg VnfrConfig, vdu *catalogue.VirtualD
 		port, err := nat.NewPort("tcp", v)
 		if err != nil {
 			debug.PrintStack()
-			return nil, err
+			return "", err
 		}
 		expPorts[port] = struct{}{}
 		portBindings[port] = []nat.PortBinding{{
@@ -296,13 +306,13 @@ func (h *HandlerVnfmImpl) startContainer(cfg VnfrConfig, vdu *catalogue.VirtualD
 
 	resp, err := cl.ContainerCreate(ctx, config, &hostCfg, &networkingConfig, fmt.Sprintf("%s-%d", cfg.Name, randInt(1000, 9999)))
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	options := types.ContainerStartOptions{
 	}
 	if err := cl.ContainerStart(ctx, resp.ID, options); err != nil {
-		return nil, err
+		return "", err
 	}
 
 	for netName, endpointSettings := range endCfg {
@@ -315,7 +325,20 @@ func (h *HandlerVnfmImpl) startContainer(cfg VnfrConfig, vdu *catalogue.VirtualD
 	}
 
 	go h.readLogsFromContainer(cl, resp.ID, cfg)
-	return &resp, nil
+	cfg.ContainerIDs[vduID] = append(cfg.ContainerIDs[vduID], resp.ID)
+	return resp.ID, nil
+}
+
+func firstNet(vnfc *catalogue.VNFCInstance) string {
+	currId := math.MaxInt64
+	var firstNetName string
+	for _, cp := range vnfc.ConnectionPoints {
+		if cp.InterfaceID < currId {
+			firstNetName = cp.VirtualLinkReference
+			currId = cp.InterfaceID
+		}
+	}
+	return firstNetName
 }
 
 func randInt(min int, max int) int {
@@ -323,7 +346,7 @@ func randInt(min int, max int) int {
 	return min + rand.Intn(max-min)
 }
 
-func (h *HandlerVnfmImpl) readLogsFromContainer(cl *docker.Client, contID string, cfg VnfrConfig) {
+func (h *VnfmImpl) readLogsFromContainer(cl *docker.Client, contID string, cfg VnfrConfig) {
 	time.Sleep(5 * time.Second)
 	logs, _ := cl.ContainerLogs(ctx, contID, types.ContainerLogsOptions{
 		Details:    false,
@@ -342,19 +365,19 @@ func (h *HandlerVnfmImpl) readLogsFromContainer(cl *docker.Client, contID string
 	}
 }
 
-func (h *HandlerVnfmImpl) StartVNFCInstance(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) StartVNFCInstance(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) Stop(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) Stop(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) StopVNFCInstance(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) StopVNFCInstance(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	h.Logger.Noticef("Remove container for vnfr: %v", vnfr.Name)
 	cfg := &VnfrConfig{}
 	err := getConfig(vnfr.ID, cfg, h.Logger)
@@ -369,7 +392,7 @@ func (h *HandlerVnfmImpl) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecord
 			h.Logger.Errorf("Error while getting client: %v", err)
 			return nil, err
 		}
-		var timeout time.Duration = 10 * time.Second
+		var timeout = 10 * time.Second
 		for _, ids := range cfg.ContainerIDs {
 			for _, id := range ids {
 				cl.ContainerStop(ctx, id, &timeout)
@@ -384,14 +407,14 @@ func (h *HandlerVnfmImpl) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecord
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) UpdateSoftware(script *catalogue.Script, vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) UpdateSoftware(script *catalogue.Script, vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
 	return vnfr, nil
 }
 
-func (h *HandlerVnfmImpl) UpgradeSoftware() error {
+func (h *VnfmImpl) UpgradeSoftware() error {
 	return nil
 }
 
-func (h *HandlerVnfmImpl) UserData() string {
+func (h *VnfmImpl) UserData() string {
 	return ""
 }
