@@ -177,15 +177,23 @@ func (h *VnfmImpl) Scale(scaleInOrOut catalogue.Action, vnfr *catalogue.VirtualN
 		cfg := VnfrConfig{}
 		getConfig(vnfr.ID, &cfg, h.Logger)
 		//TODO handle the case with multiple VDU!
-		switch t := component.(type) {
+		switch vnfci := component.(type) {
 		case *catalogue.VNFCInstance:
-			id, err := h.startContainer(cfg, vnfr.VDUs[0].ID, firstNet(t))
+			id, ips, err := h.startContainer(cfg, vnfr.VDUs[0].ID, firstNet(vnfci))
 			if err != nil {
 				return nil, err
 			}
-			t.VCID = id
+			i := 0
+			for k, v := range ips {
+				vnfci.IPs[i] = &catalogue.IP{
+					NetName: k,
+					IP:      v,
+				}
+				i++
+			}
+			vnfci.VCID = id
 		default:
-			return nil, errors.New(fmt.Sprintf("Received type %T but VNFCInstance required", t))
+			return nil, errors.New(fmt.Sprintf("Received type %T but VNFCInstance required", vnfci))
 		}
 	case catalogue.ActionScaleIn:
 	}
@@ -201,23 +209,32 @@ func (h *VnfmImpl) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalog
 	}
 	for _, vdu := range vnfr.VDUs {
 		for _, vnfc := range vdu.VNFCInstances {
-			id, err := h.startContainer(cfg, vdu.ID, firstNet(vnfc))
+			id, ips, err := h.startContainer(cfg, vdu.ID, firstNet(vnfc))
 			if err != nil {
 				return nil, err
 			}
 			vnfc.VCID = id
+			vnfc.IPs = make([]*catalogue.IP, len(ips))
+			i := 0
+			for k, v := range ips {
+				vnfc.IPs[i] = &catalogue.IP{
+					NetName: k,
+					IP:      v,
+				}
+				i++
+			}
 		}
 	}
 	SaveConfig(vnfr.ID, cfg, h.Logger)
 	return vnfr, nil
 }
 
-func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName string) (string, error) {
+func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName string) (string, map[string]string, error) {
 
 	cl, err := getClient(cfg.VimInstance[vduID], h.CertFolder, h.Tsl)
 	if err != nil {
 		h.Logger.Errorf("Error while getting client: %v", err)
-		return "", err
+		return "", nil, err
 	}
 	mounts := make([]mount.Mount, len(cfg.Mnts))
 
@@ -241,7 +258,7 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 		net, err := cl.NetworkInspect(ctx, netId, types.NetworkInspectOptions{})
 		if err != nil {
 			h.Logger.Errorf("Network with id [%s] not found", netId)
-			return "", err
+			return "", nil, err
 		}
 		aliases := []string{fmt.Sprintf("%s.%s", cfg.Name, strings.Split(net.Name, "_")[0])}
 		h.Logger.Debugf("%s: Aliases: %v", cfg.Name, aliases)
@@ -273,7 +290,7 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 		port, err := nat.NewPort("tcp", v)
 		if err != nil {
 			debug.PrintStack()
-			return "", err
+			return "", nil, err
 		}
 		expPorts[port] = struct{}{}
 		portBindings[port] = []nat.PortBinding{{
@@ -306,13 +323,13 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 
 	resp, err := cl.ContainerCreate(ctx, config, &hostCfg, &networkingConfig, fmt.Sprintf("%s-%d", cfg.Name, randInt(1000, 9999)))
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	options := types.ContainerStartOptions{
 	}
 	if err := cl.ContainerStart(ctx, resp.ID, options); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	for netName, endpointSettings := range endCfg {
@@ -326,7 +343,15 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 
 	go h.readLogsFromContainer(cl, resp.ID, cfg)
 	cfg.ContainerIDs[vduID] = append(cfg.ContainerIDs[vduID], resp.ID)
-	return resp.ID, nil
+	c, err := cl.ContainerInspect(ctx, resp.ID)
+	if err != nil {
+		return "", nil, err
+	}
+	ips := make(map[string]string)
+	for netName, cfg := range c.NetworkSettings.Networks {
+		ips[netName] = cfg.IPAddress
+	}
+	return resp.ID, ips, nil
 }
 
 func firstNet(vnfc *catalogue.VNFCInstance) string {
