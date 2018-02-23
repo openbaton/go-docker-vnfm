@@ -293,25 +293,23 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 				debug.PrintStack()
 				return "", nil, err
 			}
-		} else {
-			portSrc, err = nat.NewPort("tcp", prts[0])
-			if err != nil {
-				debug.PrintStack()
-				return "", nil, err
+			portBindings[portTrg] = []nat.PortBinding{{
+				HostIP:   "0.0.0.0",
+				HostPort: portSrc.Port(),
+			},
 			}
+		} else {
 			portTrg, err = nat.NewPort("tcp", prts[0])
 			if err != nil {
 				debug.PrintStack()
 				return "", nil, err
 			}
+			portBindings[portTrg] = []nat.PortBinding{{
+				HostIP: "0.0.0.0",
+			},
+			}
 		}
-
 		expPorts[portTrg] = struct{}{}
-		portBindings[portTrg] = []nat.PortBinding{{
-			HostIP:   "0.0.0.0",
-			HostPort: portSrc.Port(),
-		},
-		}
 	}
 	hostCfg := container.HostConfig{
 		DNS:          cfg.DNSs,
