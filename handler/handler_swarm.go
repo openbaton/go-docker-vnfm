@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"bufio"
 	"errors"
-	"strings"
 	"math/rand"
 	"runtime/debug"
 	"encoding/json"
@@ -47,15 +46,14 @@ func (h *VnfmSwarmHandler) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 		return nil, errors.New("no VDU provided")
 	}
 	config := NewVnfrConfig(vnfr)
-	aliases := FillConfig(vnfr, &config)
+	aliases := FillConfig(vnfr, &config, h.Logger)
 
 	config.NetworkCfg = make(map[string]NetConf)
 
 	pubPorts := make([]string, 0)
 
 	for _, ps := range config.PubPort {
-		split := strings.Split(ps, ":")
-		pubPorts = append(pubPorts, split[0], split[1])
+		pubPorts = append(pubPorts, ps[0], ps[1])
 	}
 
 	for _, vdu := range vnfr.VDUs {

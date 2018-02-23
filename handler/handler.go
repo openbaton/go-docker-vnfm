@@ -61,7 +61,7 @@ func (h *VnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRecord, scr
 		return nil, errors.New("no VDU provided")
 	}
 	config := NewVnfrConfig(vnfr)
-	FillConfig(vnfr, &config)
+	FillConfig(vnfr, &config, h.Logger)
 
 	pubPorts := make([]string, 0)
 	for _, ps := range config.ExpPort {
@@ -287,15 +287,16 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 	var pubAllPort = false
 	for _, v := range cfg.PubPort {
 		pubAllPort = true
-		port, err := nat.NewPort("tcp", v)
+		portSrc, err := nat.NewPort("tcp", v[0])
+		portTrg, err := nat.NewPort("tcp", v[1])
 		if err != nil {
 			debug.PrintStack()
 			return "", nil, err
 		}
-		expPorts[port] = struct{}{}
-		portBindings[port] = []nat.PortBinding{{
+		expPorts[portTrg] = struct{}{}
+		portBindings[portTrg] = []nat.PortBinding{{
 			HostIP:   "0.0.0.0",
-			HostPort: port.Port(),
+			HostPort: portSrc.Port(),
 		},
 		}
 	}

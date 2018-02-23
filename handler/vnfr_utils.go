@@ -27,7 +27,7 @@ type VnfrConfig struct {
 	BaseHostname  string
 	RestartPolicy string
 	Cmd           strslice.StrSlice
-	PubPort       []string
+	PubPort       [][]string
 	ExpPort       []string
 	Constraints   []string
 	Mnts          []string
@@ -42,7 +42,7 @@ func NewVnfrConfig(vnfr *catalogue.VirtualNetworkFunctionRecord) VnfrConfig {
 	return VnfrConfig{
 		VnfrID:       vnfr.ID,
 		DNSs:         make([]string, 0),
-		PubPort:      make([]string, 0),
+		PubPort:      make([][]string, 0),
 		ExpPort:      make([]string, 0),
 		Constraints:  make([]string, 0),
 		VimInstance:  make(map[string]*catalogue.DockerVimInstance),
@@ -53,14 +53,14 @@ func NewVnfrConfig(vnfr *catalogue.VirtualNetworkFunctionRecord) VnfrConfig {
 	}
 }
 
-func FillConfig(vnfr *catalogue.VirtualNetworkFunctionRecord, config *VnfrConfig) Aliases {
+func FillConfig(vnfr *catalogue.VirtualNetworkFunctionRecord, config *VnfrConfig, l *logging.Logger) Aliases {
 	aliases := make(map[string][]string)
 	for _, cp := range vnfr.Configurations.ConfigurationParameters {
 		kLower := strings.ToLower(cp.ConfKey)
 		if strings.Contains(kLower, "cmd") || strings.Contains(kLower, "command") {
 			config.Cmd = strings.Split(cp.Value, " ")
 		} else if strings.Contains(kLower, "publish") {
-			config.PubPort = append(config.PubPort, cp.Value)
+			config.PubPort = append(config.PubPort, strings.Split(cp.Value,":"))
 		} else if kLower == "aliases" { // aliases looks like mgmt:name1,name2;net_d:name3,name4
 			if strings.Contains(cp.Value, ";") {
 				for _, val := range strings.Split(cp.Value, ";") {
@@ -95,6 +95,8 @@ func FillConfig(vnfr *catalogue.VirtualNetworkFunctionRecord, config *VnfrConfig
 			config.Own[cp.ConfKey] = cp.Value
 		}
 	}
+	config.Name = vnfr.Name
+	l.Debugf("%s: Internal Config is %+v", config.Name, config)
 	return aliases
 }
 
