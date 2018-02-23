@@ -63,12 +63,6 @@ func (h *VnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRecord, scr
 	config := NewVnfrConfig(vnfr)
 	FillConfig(vnfr, &config, h.Logger)
 
-	pubPorts := make([]string, 0)
-	for _, ps := range config.ExpPort {
-		h.Logger.Debugf("Ports: %v", ps)
-		pubPorts = append(pubPorts, ps)
-	}
-
 	for _, vdu := range vnfr.VDUs {
 		vdu.VNFCInstances = make([]*catalogue.VNFCInstance, 0)
 		vimInstanceChosen := vimInstances[vdu.ParentVDU][rand.Intn(len(vimInstances[vdu.ParentVDU]))]
@@ -285,14 +279,33 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 
 	expPorts := make(nat.PortSet)
 	var pubAllPort = false
-	for _, v := range cfg.PubPort {
+	for _, prts := range cfg.PubPort {
 		pubAllPort = true
-		portSrc, err := nat.NewPort("tcp", v[0])
-		portTrg, err := nat.NewPort("tcp", v[1])
-		if err != nil {
-			debug.PrintStack()
-			return "", nil, err
+		var portSrc, portTrg nat.Port
+		if len(prts) == 2 {
+			portSrc, err = nat.NewPort("tcp", prts[0])
+			if err != nil {
+				debug.PrintStack()
+				return "", nil, err
+			}
+			portTrg, err = nat.NewPort("tcp", prts[1])
+			if err != nil {
+				debug.PrintStack()
+				return "", nil, err
+			}
+		} else {
+			portSrc, err = nat.NewPort("tcp", prts[0])
+			if err != nil {
+				debug.PrintStack()
+				return "", nil, err
+			}
+			portTrg, err = nat.NewPort("tcp", prts[0])
+			if err != nil {
+				debug.PrintStack()
+				return "", nil, err
+			}
 		}
+
 		expPorts[portTrg] = struct{}{}
 		portBindings[portTrg] = []nat.PortBinding{{
 			HostIP:   "0.0.0.0",
