@@ -23,7 +23,7 @@
       "vm_image": [
         "openbaton/iperfserver:latest"
       ],
-      "scale_in_out": 2,
+      "scale_in_out": 20,
       "vnfc": [{
         "connection_point": [{
           "virtual_link_reference": "new-network"
@@ -53,7 +53,7 @@
       "vm_image": [
         "openbaton/iperfclient:latest"
       ],
-      "scale_in_out": 2,
+      "scale_in_out": 20,
       "vnfc": [{
         "connection_point": [{
           "virtual_link_reference": "new-network"
