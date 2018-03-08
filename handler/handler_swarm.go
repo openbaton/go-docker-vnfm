@@ -68,7 +68,7 @@ func (h *VnfmSwarmHandler) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRec
 			h.Logger.Errorf("Error: %v", err)
 			return nil, err
 		}
-		_, cps, netNames, err := GetCPsAndIpsFromFixedIps(cli, vdu, h.Logger, vnfr, config)
+		_, cps, netNames, err := GetCPsAndIpsFromFixedIps(cli, vdu.VNFCs[0], h.Logger, vnfr, config)
 		if err != nil {
 			h.Logger.Errorf("Error: %v", err)
 			return nil, err
@@ -158,8 +158,8 @@ func (h *VnfmSwarmHandler) Resume(vnfr *catalogue.VirtualNetworkFunctionRecord, 
 	return vnfr, nil
 }
 
-func (h *VnfmSwarmHandler) Scale(scaleInOrOut catalogue.Action, vnfr *catalogue.VirtualNetworkFunctionRecord, component catalogue.Component, scripts interface{}, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
-	return vnfr, nil
+func (h *VnfmSwarmHandler) Scale(chosenVimInstance interface{}, scaleInOrOut catalogue.Action, vnfr *catalogue.VirtualNetworkFunctionRecord, component catalogue.Component, scripts interface{}, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, *catalogue.VNFCInstance, error) {
+	return vnfr, nil, nil
 }
 
 func (h *VnfmSwarmHandler) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {

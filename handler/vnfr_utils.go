@@ -134,11 +134,11 @@ func arrayContains(list []string, str string) bool {
 	return false
 }
 
-func GetCPsAndIpsFromFixedIps(cl *docker.Client, vdu *catalogue.VirtualDeploymentUnit, l *logging.Logger, vnfr *catalogue.VirtualNetworkFunctionRecord, config VnfrConfig) ([]*catalogue.IP, []*catalogue.VNFDConnectionPoint, []string, error) {
+func GetCPsAndIpsFromFixedIps(cl *docker.Client, vnfComponent *catalogue.VNFComponent, l *logging.Logger, vnfr *catalogue.VirtualNetworkFunctionRecord, config VnfrConfig) ([]*catalogue.IP, []*catalogue.VNFDConnectionPoint, []string, error) {
 	netNames := make([]string, 0)
 	cps := make([]*catalogue.VNFDConnectionPoint, 0)
 	ips := make([]*catalogue.IP, 0)
-	for _, cp := range vdu.VNFCs[0].ConnectionPoints {
+	for _, cp := range vnfComponent.ConnectionPoints {
 		if cp.FixedIp != "" {
 			l.Debugf("%s: Fixed Ip is: %v", vnfr.Name, cp.FixedIp)
 		}
@@ -178,15 +178,18 @@ func GetCPsAndIpsFromFixedIps(cl *docker.Client, vdu *catalogue.VirtualDeploymen
 
 func SetupVNFCInstance(vdu *catalogue.VirtualDeploymentUnit, vimInstanceChosen *catalogue.DockerVimInstance, hostname string, cps []*catalogue.VNFDConnectionPoint, fips []*catalogue.IP, ips []*catalogue.IP) {
 	for _, vnfc := range vdu.VNFCs {
-		vdu.VNFCInstances = append(vdu.VNFCInstances, &catalogue.VNFCInstance{
-			VIMID:            vimInstanceChosen.ID,
-			Hostname:         hostname,
-			State:            "ACTIVE",
-			VCID:             vnfc.ID,
-			ConnectionPoints: cps,
-			VNFComponent:     vnfc,
-			FloatingIPs:      fips,
-			IPs:              ips,
-		})
+		instance := newVnfcInstance(vimInstanceChosen, hostname, vnfc, cps, fips, ips)
+		vdu.VNFCInstances = append(vdu.VNFCInstances, instance)
+	}
+}
+func newVnfcInstance(vimInstanceChosen *catalogue.DockerVimInstance, hostname string, vnfc *catalogue.VNFComponent, cps []*catalogue.VNFDConnectionPoint, fips []*catalogue.IP, ips []*catalogue.IP) *catalogue.VNFCInstance {
+	return &catalogue.VNFCInstance{
+		VIMID:            vimInstanceChosen.ID,
+		Hostname:         hostname,
+		State:            "ACTIVE",
+		ConnectionPoints: cps,
+		VNFComponent:     vnfc,
+		FloatingIPs:      fips,
+		IPs:              ips,
 	}
 }

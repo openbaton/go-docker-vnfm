@@ -76,7 +76,7 @@ func (h *VnfmImpl) Instantiate(vnfr *catalogue.VirtualNetworkFunctionRecord, scr
 			h.Logger.Errorf("Error while getting client: %v", err)
 			return nil, err
 		}
-		ips, cps, _, err := GetCPsAndIpsFromFixedIps(cl, vdu, h.Logger, vnfr, config)
+		ips, cps, _, err := GetCPsAndIpsFromFixedIps(cl, vdu.VNFCs[0], h.Logger, vnfr, config)
 
 		if err != nil {
 			h.Logger.Errorf("Error while getting CP: %v", err)
@@ -165,20 +165,34 @@ func (h *VnfmImpl) Resume(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInst
 	return vnfr, nil
 }
 
-func (h *VnfmImpl) Scale(scaleInOrOut catalogue.Action, vnfr *catalogue.VirtualNetworkFunctionRecord, component catalogue.Component, scripts interface{}, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, error) {
+func (h *VnfmImpl) Scale(chosenVimInstance interface{}, scaleInOrOut catalogue.Action, vnfr *catalogue.VirtualNetworkFunctionRecord, component catalogue.Component, scripts interface{}, dependency *catalogue.VNFRecordDependency) (*catalogue.VirtualNetworkFunctionRecord, *catalogue.VNFCInstance, error) {
+	//TODO get vim instance
+	var vnfci *catalogue.VNFCInstance
 	switch scaleInOrOut {
 	case catalogue.ActionScaleOut:
 		cfg := VnfrConfig{}
 		getConfig(vnfr.ID, &cfg, h.Logger)
 		//TODO handle the case with multiple VDU!
-		switch vnfci := component.(type) {
-		case *catalogue.VNFCInstance:
-			id, ips, err := h.startContainer(cfg, vnfr.VDUs[0].ID, firstNet(vnfci))
+		switch component := component.(type) {
+		case *catalogue.VNFComponent:
+			// Not yet allocated by nfvo
+			h.Logger.Debugf("%s: VNFComponent is %+v", cfg.Name, component)
+			vdu := vnfr.VDUs[0]
+			dockerVimInstance := cfg.VimInstance[vdu.ID]
+			cl, err := getClient(dockerVimInstance, dockerVimInstance.Cert, h.Tsl)
 			if err != nil {
-				return nil, err
+				h.Logger.Errorf("%s", err)
+				return nil, nil, err
+			}
+			ips, cps, _, err := GetCPsAndIpsFromFixedIps(cl, component, h.Logger, vnfr, cfg)
+			//vnfci := VNFCInstanceFrom(component, dockerVimInstance.ID)
+			vnfci = newVnfcInstance(dockerVimInstance, vnfr.Name, component, cps, nil, ips)
+			id, ips2, err := h.startContainer(cfg, vdu.ID, firstNet(vnfci))
+			if err != nil {
+				return nil, nil, err
 			}
 			i := 0
-			for k, v := range ips {
+			for k, v := range ips2 {
 				vnfci.IPs[i] = &catalogue.IP{
 					NetName: k,
 					IP:      v,
@@ -186,12 +200,13 @@ func (h *VnfmImpl) Scale(scaleInOrOut catalogue.Action, vnfr *catalogue.VirtualN
 				i++
 			}
 			vnfci.VCID = id
+			vdu.VNFCInstances = append(vdu.VNFCInstances, vnfci)
 		default:
-			return nil, errors.New(fmt.Sprintf("Received type %T but VNFCInstance required", vnfci))
+			return nil, nil, errors.New(fmt.Sprintf("Received type %T but VNFComponent required", component))
 		}
 	case catalogue.ActionScaleIn:
 	}
-	return vnfr, nil
+	return vnfr, vnfci, nil
 }
 
 func (h *VnfmImpl) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogue.VirtualNetworkFunctionRecord, error) {
@@ -248,13 +263,19 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 	}
 
 	endCfg := make(map[string]*network.EndpointSettings)
+	obNetNames := make(map[string]string, len(cfg.NetworkCfg))
+	i := 0
 	for netId, values := range cfg.NetworkCfg {
 		net, err := cl.NetworkInspect(ctx, netId, types.NetworkInspectOptions{})
 		if err != nil {
 			h.Logger.Errorf("Network with id [%s] not found", netId)
 			return "", nil, err
 		}
-		aliases := []string{fmt.Sprintf("%s.%s", cfg.Name, strings.Split(net.Name, "_")[0])}
+		netSplit := strings.Split(net.Name, "_")
+		obNetName := strings.Join(netSplit[:len(netSplit)-1], "")
+		obNetNames[net.Name] = obNetName
+		i += 1
+		aliases := []string{fmt.Sprintf("%s.%s", cfg.Name, obNetName), cfg.Name}
 		h.Logger.Debugf("%s: Aliases: %v", cfg.Name, aliases)
 		endCfg[net.Name] = &network.EndpointSettings{
 			IPAddress: values.IpV4Address,
@@ -265,7 +286,7 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 			NetworkID: netId,
 		}
 	}
-
+	h.Logger.Debugf("%s: OB net names are %+v", cfg.Name, obNetNames)
 	firstCfg := make(map[string]*network.EndpointSettings)
 	h.Logger.Debugf("%s: First network is: %s", cfg.Name, firstNetName)
 	firstCfg[firstNetName] = endCfg[firstNetName]
@@ -361,7 +382,7 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 	}
 	ips := make(map[string]string)
 	for netName, cfg := range c.NetworkSettings.Networks {
-		ips[netName] = cfg.IPAddress
+		ips[obNetNames[netName]] = cfg.IPAddress
 	}
 	return resp.ID, ips, nil
 }
