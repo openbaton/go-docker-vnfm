@@ -7,4 +7,4 @@ ENV SERVER_MGMT ''
 ENV SERVER_HOSTNAME ''
 ENV TIME '150'
 #CMD iperf -c $SERVER_MGMT -t 150
-ENTRYPOINT echo "Connecting to: $SERVER_HOSTNAME for $TIME sec" && iperf -c $SERVER_HOSTNAME -t $TIME
+ENTRYPOINT echo "Connecting to: '$SERVER_HOSTNAME' for $TIME sec" && sleep 5 && iperf -c $SERVER_HOSTNAME -t $TIME
