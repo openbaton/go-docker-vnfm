@@ -187,7 +187,7 @@ func (h *VnfmImpl) Scale(chosenVimInstance interface{}, scaleInOrOut catalogue.A
 			ips, cps, _, err := GetCPsAndIpsFromFixedIps(cl, component, h.Logger, vnfr, cfg)
 			//vnfci := VNFCInstanceFrom(component, dockerVimInstance.ID)
 			vnfci = newVnfcInstance(dockerVimInstance, vnfr.Name, component, cps, nil, ips)
-			id, ips2, err := h.startContainer(cfg, vdu.ID, firstNet(vnfci))
+			id, ips2, name, err := h.startContainer(cfg, vdu.ID, firstNet(vnfci))
 			if err != nil {
 				return nil, nil, err
 			}
@@ -200,6 +200,7 @@ func (h *VnfmImpl) Scale(chosenVimInstance interface{}, scaleInOrOut catalogue.A
 				i++
 			}
 			vnfci.VCID = id
+			vnfci.Hostname = name
 			vdu.VNFCInstances = append(vdu.VNFCInstances, vnfci)
 		default:
 			return nil, nil, errors.New(fmt.Sprintf("Received type %T but VNFComponent required", component))
@@ -218,11 +219,12 @@ func (h *VnfmImpl) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalog
 	}
 	for _, vdu := range vnfr.VDUs {
 		for _, vnfc := range vdu.VNFCInstances {
-			id, ips, err := h.startContainer(cfg, vdu.ID, firstNet(vnfc))
+			id, ips, name, err := h.startContainer(cfg, vdu.ID, firstNet(vnfc))
 			if err != nil {
 				return nil, err
 			}
 			vnfc.VCID = id
+			vnfc.Hostname = name
 			vnfc.IPs = make([]*catalogue.IP, len(ips))
 			i := 0
 			for k, v := range ips {
@@ -238,12 +240,12 @@ func (h *VnfmImpl) Start(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalog
 	return vnfr, nil
 }
 
-func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName string) (string, map[string]string, error) {
+func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName string) (string, map[string]string, string, error) {
 
 	cl, err := getClient(cfg.VimInstance[vduID], h.CertFolder, h.Tsl)
 	if err != nil {
 		h.Logger.Errorf("Error while getting client: %v", err)
-		return "", nil, err
+		return "", nil, "", err
 	}
 	mounts := make([]mount.Mount, len(cfg.Mnts))
 
@@ -269,7 +271,7 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 		net, err := cl.NetworkInspect(ctx, netId, types.NetworkInspectOptions{})
 		if err != nil {
 			h.Logger.Errorf("Network with id [%s] not found", netId)
-			return "", nil, err
+			return "", nil, "", err
 		}
 		netSplit := strings.Split(net.Name, "_")
 		obNetName := strings.Join(netSplit[:len(netSplit)-1], "")
@@ -307,12 +309,12 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 			portSrc, err = nat.NewPort("tcp", prts[0])
 			if err != nil {
 				debug.PrintStack()
-				return "", nil, err
+				return "", nil, "", err
 			}
 			portTrg, err = nat.NewPort("tcp", prts[1])
 			if err != nil {
 				debug.PrintStack()
-				return "", nil, err
+				return "", nil, "", err
 			}
 			portBindings[portTrg] = []nat.PortBinding{{
 				HostIP:   "0.0.0.0",
@@ -323,7 +325,7 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 			portTrg, err = nat.NewPort("tcp", prts[0])
 			if err != nil {
 				debug.PrintStack()
-				return "", nil, err
+				return "", nil, "", err
 			}
 			portBindings[portTrg] = []nat.PortBinding{{
 				HostIP: "0.0.0.0",
@@ -356,13 +358,13 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 
 	resp, err := cl.ContainerCreate(ctx, config, &hostCfg, &networkingConfig, fmt.Sprintf("%s-%d", cfg.Name, randInt(1000, 9999)))
 	if err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
 
 	options := types.ContainerStartOptions{
 	}
 	if err := cl.ContainerStart(ctx, resp.ID, options); err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
 
 	for netName, endpointSettings := range endCfg {
@@ -378,13 +380,13 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 	cfg.ContainerIDs[vduID] = append(cfg.ContainerIDs[vduID], resp.ID)
 	c, err := cl.ContainerInspect(ctx, resp.ID)
 	if err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
 	ips := make(map[string]string)
 	for netName, cfg := range c.NetworkSettings.Networks {
 		ips[obNetNames[netName]] = cfg.IPAddress
 	}
-	return resp.ID, ips, nil
+	return resp.ID, ips, c.Name[1:], nil
 }
 
 func firstNet(vnfc *catalogue.VNFCInstance) string {
