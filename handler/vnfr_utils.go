@@ -142,6 +142,23 @@ func GetCPsAndIpsFromFixedIps(cl *docker.Client, vnfComponent *catalogue.VNFComp
 		if cp.FixedIp != "" {
 			l.Debugf("%s: Fixed Ip is: %v", vnfr.Name, cp.FixedIp)
 		}
+		// if cp.VirtualLinkReferenceId is empty, get the id
+		// from docker before proceeding.
+		if cp.VirtualLinkReferenceId == "" {
+			networks, err := cl.NetworkList(ctx, types.NetworkListOptions{})
+			if err != nil {
+				l.Errorf("Error listing network from Docker")
+			} else {
+				for _, element := range networks {
+					// l.Debugf("network: %s, ID: %s", element.Name, element.ID)
+					if element.Name == cp.VirtualLinkReference {
+						l.Debugf("Setting ID of network %s to %s", cp.VirtualLinkReference, element.ID)
+						cp.VirtualLinkReferenceId = element.ID
+					}
+				}
+			}
+		}
+
 		config.NetworkCfg[cp.VirtualLinkReferenceId] = NetConf{
 			IpV4Address: cp.FixedIp,
 		}
