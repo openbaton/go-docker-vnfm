@@ -52,6 +52,10 @@ func getClient(instance *catalogue.DockerVimInstance, certDirectory string, tsl 
 }
 
 func createService(l *logging.Logger, client *docker.Client, ctx context.Context, replicas uint64, image, baseHostname string, cmd, networkIds, pubPorts, constraints []string, aliases map[string][]string) (*swarm.Service, error) {
+	return createServiceWait(l, client, ctx, replicas, image, baseHostname, cmd, networkIds, pubPorts, constraints, aliases, true)
+}
+
+func createServiceWait(l *logging.Logger, client *docker.Client, ctx context.Context, replicas uint64, image, baseHostname string, cmd, networkIds, pubPorts, constraints []string, aliases map[string][]string, waitForIp bool) (*swarm.Service, error) {
 	networks := make([]swarm.NetworkAttachmentConfig, 0)
 	for _, netId := range networkIds {
 		netName, err := getNetNameFromId(client, netId)
@@ -125,10 +129,20 @@ func createService(l *logging.Logger, client *docker.Client, ctx context.Context
 		debug.PrintStack()
 		return nil, err
 	}
-	srv, err := waitUntilIp(client, ctx, resp.ID)
-	if err != nil {
-		debug.PrintStack()
-		return nil, err
+	var srv *swarm.Service
+	if waitForIp {
+		srv, err = waitUntilIp(client, ctx, resp.ID)
+		if err != nil {
+			debug.PrintStack()
+			return nil, err
+		}
+	} else {
+		s, _, err := client.ServiceInspectWithRaw(ctx, resp.ID, types.ServiceInspectOptions{})
+		if err != nil {
+			debug.PrintStack()
+			return nil, err
+		}
+		srv = &s
 	}
 	return srv, nil
 }

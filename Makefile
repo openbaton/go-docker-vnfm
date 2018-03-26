@@ -48,3 +48,6 @@ check:
 
 run: install
 	@$(TARGET)
+
+test:
+	@go test

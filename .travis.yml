@@ -1,7 +1,19 @@
 language: go
 
+sudo: required
+
+services:
+  - docker
+
 go:
   - "1.x"
   - "1.8"
   - "1.10.x"
   - master
+
+before_install:
+  - docker swarm init
+  - docker pull ubuntu:latest
+
+script:
+  - go test -v github.com/openbaton/go-docker-vnfm/handler 

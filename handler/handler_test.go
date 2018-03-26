@@ -121,20 +121,23 @@ func TestDockerListContainers(t *testing.T) {
 }
 
 func TestCreateService(t *testing.T) {
-	cli, err := getClient(getVimInstance(), certDirectory, true)
+	cli, err := getClient(getVimInstance(), "", true)
 	assert.NoError(t, err)
-	imagename := "iperfserver"
-	hostname := "iperfsrv"
-	netId := "eiuh5t94dv2j"
-	res, err := createService(cli, ctx, 0, imagename, hostname, []string{netId}, []string{})
+	imagename := "ubuntu"
+	hostname := "ubuntu"
+	netName := "ingress"
+	netIds, err := getNetworkIdsFromNames(cli, []string{netName})
+	assert.NoError(t, err)
+	res, err := createServiceWait(log, cli, ctx, 0, imagename, hostname, []string{"while true; echo 'openbaton'"}, netIds, []string{}, []string{}, make(map[string][]string), false)
 	if !assert.NoError(t, err) {
 		assert.FailNow(t, err.Error())
 	}
+	log.Debugf("Response is %v", res)
 	service, _, err := cli.ServiceInspectWithRaw(ctx, res.ID, types.ServiceInspectOptions{})
 	if !assert.NoError(t, err) {
 		assert.FailNow(t, err.Error())
 	}
-	err = updateService(cli, ctx, &service, 5, []string{})
+	err = updateService(log, cli, ctx, &service, 5, []string{}, []string{}, []string{}, "")
 	if !assert.NoError(t, err) {
 		assert.FailNow(t, err.Error())
 	}
@@ -142,10 +145,12 @@ func TestCreateService(t *testing.T) {
 	fmt.Println(fmt.Sprintf("%v", string(val)))
 }
 
-func getVimInstance() *catalogue.VIMInstance {
-	return &catalogue.VIMInstance{
-		Tenant:  "1.32",
-		Name:    "test",
-		AuthURL: "tcp://192.168.99.100:2376",
+func getVimInstance() *catalogue.DockerVimInstance {
+	return &catalogue.DockerVimInstance{
+		BaseVimInstance: catalogue.BaseVimInstance{
+			AuthURL: "unix:///var/run/docker.sock",
+			Name:    "test-vim-instance",
+			Type:    "docker",
+		},
 	}
 }
