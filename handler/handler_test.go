@@ -121,7 +121,7 @@ func TestDockerListContainers(t *testing.T) {
 }
 
 func TestCreateService(t *testing.T) {
-	cli, err := getClient(getVimInstance(), "", true)
+	cli, err := getClient(getVimInstance(), "", false)
 	assert.NoError(t, err)
 	imagename := "ubuntu"
 	hostname := "ubuntu"
