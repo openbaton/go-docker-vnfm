@@ -1,24 +1,24 @@
 package handler
 
 import (
+	"crypto/tls"
+	"docker.io/go-docker"
+	"docker.io/go-docker/api"
+	"docker.io/go-docker/api/types"
+	"docker.io/go-docker/api/types/mount"
+	"docker.io/go-docker/api/types/swarm"
 	"fmt"
-	"time"
+	"github.com/docker/go-connections/tlsconfig"
+	"github.com/op/go-logging"
+	"github.com/openbaton/go-openbaton/catalogue"
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+	"net/http"
+	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
-	"net/http"
-	"crypto/tls"
-	"path/filepath"
-	"docker.io/go-docker"
-	"github.com/pkg/errors"
-	"docker.io/go-docker/api"
-	"golang.org/x/net/context"
-	"github.com/op/go-logging"
-	"docker.io/go-docker/api/types"
-	"docker.io/go-docker/api/types/swarm"
-	"docker.io/go-docker/api/types/mount"
-	"github.com/docker/go-connections/tlsconfig"
-	"github.com/openbaton/go-openbaton/catalogue"
-	"runtime/debug"
+	"time"
 )
 
 func getClient(instance *catalogue.DockerVimInstance, certDirectory string, tsl bool) (*docker.Client, error) {
@@ -119,9 +119,7 @@ func createService(l *logging.Logger, client *docker.Client, ctx context.Context
 		},
 	}
 
-	serviceCreateOptions := types.ServiceCreateOptions{
-
-	}
+	serviceCreateOptions := types.ServiceCreateOptions{}
 	resp, err := client.ServiceCreate(ctx, serviceSpec, serviceCreateOptions)
 	if err != nil {
 		debug.PrintStack()
@@ -158,7 +156,7 @@ func hasIp(service swarm.Service) bool {
 	return false
 }
 
-func updateService(l *logging.Logger, client *docker.Client, ctx context.Context, service *swarm.Service, replica uint64, env, mnts, constraints []string, restartPolicy string) (error) {
+func updateService(l *logging.Logger, client *docker.Client, ctx context.Context, service *swarm.Service, replica uint64, env, mnts, constraints []string, restartPolicy string) error {
 	mounts := make([]mount.Mount, len(mnts))
 	var rp swarm.RestartPolicyCondition
 	if restartPolicy == "on-failure" {
@@ -208,9 +206,7 @@ func updateService(l *logging.Logger, client *docker.Client, ctx context.Context
 		EndpointSpec: service.Spec.EndpointSpec,
 		Annotations:  service.Spec.Annotations,
 	}
-	serviceCreateOptions := types.ServiceUpdateOptions{
-
-	}
+	serviceCreateOptions := types.ServiceUpdateOptions{}
 
 	srv, _, _ := client.ServiceInspectWithRaw(ctx, service.ID, types.ServiceInspectOptions{})
 

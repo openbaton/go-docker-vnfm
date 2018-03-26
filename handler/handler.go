@@ -1,25 +1,25 @@
 package handler
 
 import (
-	"fmt"
-	"math"
-	"time"
 	"bufio"
-	"errors"
-	"strings"
 	"context"
+	"docker.io/go-docker"
+	"docker.io/go-docker/api/types"
+	"docker.io/go-docker/api/types/container"
+	"docker.io/go-docker/api/types/mount"
+	"docker.io/go-docker/api/types/network"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/dgraph-io/badger"
+	"github.com/docker/go-connections/nat"
+	"github.com/op/go-logging"
+	"github.com/openbaton/go-openbaton/catalogue"
+	"math"
 	"math/rand"
 	"runtime/debug"
-	"encoding/json"
-	"docker.io/go-docker"
-	"github.com/op/go-logging"
-	"github.com/dgraph-io/badger"
-	"docker.io/go-docker/api/types"
-	"docker.io/go-docker/api/types/mount"
-	"github.com/docker/go-connections/nat"
-	"docker.io/go-docker/api/types/network"
-	"docker.io/go-docker/api/types/container"
-	"github.com/openbaton/go-openbaton/catalogue"
+	"strings"
+	"time"
 )
 
 var (
@@ -361,8 +361,7 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 		return "", nil, "", err
 	}
 
-	options := types.ContainerStartOptions{
-	}
+	options := types.ContainerStartOptions{}
 	if err := cl.ContainerStart(ctx, resp.ID, options); err != nil {
 		return "", nil, "", err
 	}

@@ -6,11 +6,9 @@ RUN export GOPATH=/go
 COPY . .
 RUN curl -fsSL -o /usr/local/bin/dep https://github.com/golang/dep/releases/download/v0.4.1/dep-linux-amd64 && chmod +x /usr/local/bin/dep
 RUN dep ensure -v
-WORKDIR /go/src/github.com/golang/openbaton/go-docker-vnfm/main
-RUN go build -o goapp
+RUN go build -o go-docker-vnfm
 
 # final stage
 FROM alpine
-WORKDIR /app
-COPY --from=build-env /go/src/github.com/golang/openbaton/go-docker-vnfm/main/goapp /app/
-ENTRYPOINT ["./goapp"]
+COPY --from=build-env /go/src/github.com/golang/openbaton/go-docker-vnfm/go-docker-vnfm .
+ENTRYPOINT ["./go-docker-vnfm"]

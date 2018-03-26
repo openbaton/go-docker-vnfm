@@ -1,16 +1,16 @@
 package handler
 
 import (
-	"fmt"
 	"bufio"
+	"docker.io/go-docker"
+	"docker.io/go-docker/api/types"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/op/go-logging"
+	"github.com/openbaton/go-openbaton/catalogue"
 	"math/rand"
 	"runtime/debug"
-	"encoding/json"
-	"docker.io/go-docker"
-	"github.com/op/go-logging"
-	"docker.io/go-docker/api/types"
-	"github.com/openbaton/go-openbaton/catalogue"
 )
 
 type VnfmSwarmHandler struct {

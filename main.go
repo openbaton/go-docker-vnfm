@@ -1,12 +1,12 @@
 package main
 
 import (
-	"github.com/openbaton/go-openbaton/vnfmsdk"
-	"github.com/openbaton/go-openbaton/sdk"
-	"github.com/openbaton/go-docker-vnfm/handler"
 	"flag"
-	"os"
 	"fmt"
+	"github.com/openbaton/go-docker-vnfm/handler"
+	"github.com/openbaton/go-openbaton/sdk"
+	"github.com/openbaton/go-openbaton/vnfmsdk"
+	"os"
 )
 
 func main() {
@@ -37,7 +37,7 @@ func main() {
 		os.Exit(12)
 	}
 	if !pathExists {
-		err = os.MkdirAll(*dirPath, os.ModePerm);
+		err = os.MkdirAll(*dirPath, os.ModePerm)
 		if err != nil {
 			fmt.Errorf("%v", err)
 			os.Exit(13)

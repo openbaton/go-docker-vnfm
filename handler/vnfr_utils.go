@@ -1,15 +1,15 @@
 package handler
 
 import (
-	"fmt"
-	"errors"
-	"strings"
-	"github.com/op/go-logging"
-	"docker.io/go-docker/api/types/swarm"
-	"docker.io/go-docker/api/types/strslice"
-	"github.com/openbaton/go-openbaton/catalogue"
 	"docker.io/go-docker"
 	"docker.io/go-docker/api/types"
+	"docker.io/go-docker/api/types/strslice"
+	"docker.io/go-docker/api/types/swarm"
+	"errors"
+	"fmt"
+	"github.com/op/go-logging"
+	"github.com/openbaton/go-openbaton/catalogue"
+	"strings"
 )
 
 type Aliases map[string][]string

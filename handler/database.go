@@ -3,10 +3,10 @@ package handler
 import (
 	"bytes"
 	"encoding/gob"
-	"github.com/dgraph-io/badger"
-	"io/ioutil"
 	"fmt"
+	"github.com/dgraph-io/badger"
 	"github.com/op/go-logging"
+	"io/ioutil"
 )
 
 func deleteConfig(vnfrId string) error {
@@ -36,7 +36,7 @@ func InitDB(persist bool, dir_path string) {
 	var err error
 	kv, err = badger.NewKV(&opt)
 	if err != nil {
-		fmt.Errorf("Error while creating database: %v", err)
+		_ = fmt.Errorf("Error while creating database: %v", err)
 	}
 }
 

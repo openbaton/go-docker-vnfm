@@ -1,18 +1,18 @@
 package handler
 
 import (
-	"testing"
-	"github.com/op/go-logging"
-	"github.com/openbaton/go-openbaton/sdk"
-	"github.com/openbaton/go-openbaton/catalogue"
 	"context"
 	"fmt"
+	"github.com/op/go-logging"
+	"github.com/openbaton/go-openbaton/catalogue"
+	"github.com/openbaton/go-openbaton/sdk"
+	"testing"
 
-	"docker.io/go-docker/api/types"
 	client "docker.io/go-docker"
-	"strings"
+	"docker.io/go-docker/api/types"
 	"errors"
 	"github.com/stretchr/testify/assert"
+	"strings"
 	//"time"
 	"encoding/json"
 )
@@ -139,7 +139,7 @@ func TestCreateService(t *testing.T) {
 		assert.FailNow(t, err.Error())
 	}
 	val, err := json.MarshalIndent(service, "", "  ")
-	fmt.Println("%v", string(val))
+	fmt.Println(fmt.Sprintf("%v", string(val)))
 }
 
 func getVimInstance() *catalogue.VIMInstance {

@@ -25,15 +25,14 @@ executing
 ```bash
 git clone git@github.com:openbaton/go-docker-vnfm.git
 cd go-docker-vnfm
-cd main
-go build -o docker-vnfm
+make install
 ```
 
 Afterwards you will find the binary file in the _main_ folder.  
 Just run it as
 
 ```bash
-./docker-vnfm --help
+go-docker-vnfm --help
 Usage of ./docker-vnfm:
   -conf string
         The config file of the Docker Vim Driver (default "config.toml")
@@ -63,7 +62,7 @@ brokerPort  = 5672
 Or if you don't need special configuration you can use the default values just by running:
 
 ```bash
-./docker-vnfm
+$-> go-docker-vnfm
 ```
 
 # How to use the Docker VNFM
