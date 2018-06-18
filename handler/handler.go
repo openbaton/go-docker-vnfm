@@ -206,6 +206,17 @@ func (h *VnfmImpl) Scale(chosenVimInstance interface{}, scaleInOrOut catalogue.A
 			return nil, nil, errors.New(fmt.Sprintf("Received type %T but VNFComponent required", component))
 		}
 	case catalogue.ActionScaleIn:
+		cfg := VnfrConfig{}
+		getConfig(vnfr.ID, &cfg, h.Logger)
+		switch component := component.(type) {
+		case *catalogue.VNFCInstance:
+			_, err := h.StopVNFCInstance(vnfr, component)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+		default:
+			return nil, nil, errors.New(fmt.Sprintf("Recieved type %T but VNFCInstance required", component))
 	}
 	return vnfr, vnfci, nil
 }
@@ -433,6 +444,27 @@ func (h *VnfmImpl) Stop(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogu
 }
 
 func (h *VnfmImpl) StopVNFCInstance(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
+	h.Logger.Noticef("Stop VNFCInstance %v for vnfr: %v", vnfcInstance.ID, vnfr.Name)
+	cfg := VnfrConfig{}
+	getConfig(vnfr.ID, &cfg, h.Logger)
+	var timeout = 10 * time.Second
+
+	for _, vdu := range vnfr.VDUs {
+		cl, err := getClient(cfg.VimInstance[vdu.ID], h.CertFolder, h.Tsl)
+		if err != nil {
+			h.Logger.Errorf("Error while getting client: %v", err)
+		}
+		for i, vnfc := range vdu.VNFCInstances {
+			if vnfc.ID == vnfcInstance.ID {
+				cl.ContainerStop(ctx, vnfcInstance.VCID, &timeout)
+				go cl.ContainerRemove(ctx, vnfcInstance.VCID, types.ContainerRemoveOptions{
+					Force: true,
+				})
+				vdu.VNFCInstances = append(vdu.VNFCInstances[:i], vdu.VNFCInstances[i+1])
+				return vnfr, nil
+			}
+		}
+	}
 	return vnfr, nil
 }
 
