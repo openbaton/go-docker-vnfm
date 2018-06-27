@@ -202,6 +202,7 @@ func (h *VnfmImpl) Scale(chosenVimInstance interface{}, scaleInOrOut catalogue.A
 			vnfci.VCID = id
 			vnfci.Hostname = name
 			vdu.VNFCInstances = append(vdu.VNFCInstances, vnfci)
+			h.Logger.Debugf("Added VNFCI %v:%v in Container %v", vnfci.Hostname, vnfci.ID, vnfci.VCID)
 		default:
 			return nil, nil, errors.New(fmt.Sprintf("Received type %T but VNFComponent required", component))
 		}
@@ -444,7 +445,7 @@ func (h *VnfmImpl) Stop(vnfr *catalogue.VirtualNetworkFunctionRecord) (*catalogu
 }
 
 func (h *VnfmImpl) StopVNFCInstance(vnfr *catalogue.VirtualNetworkFunctionRecord, vnfcInstance *catalogue.VNFCInstance) (*catalogue.VirtualNetworkFunctionRecord, error) {
-	h.Logger.Noticef("Stop VNFCInstance %v for vnfr: %v", vnfcInstance.ID, vnfr.Name)
+	h.Logger.Noticef("Stop VNFCInstance %v with ID %v of vnfr: %v", vnfcInstance.Hostname, vnfcInstance.ID, vnfr.Name)
 	cfg := VnfrConfig{}
 	getConfig(vnfr.ID, &cfg, h.Logger)
 	var timeout = 10 * time.Second
@@ -456,11 +457,12 @@ func (h *VnfmImpl) StopVNFCInstance(vnfr *catalogue.VirtualNetworkFunctionRecord
 		}
 		for i, vnfc := range vdu.VNFCInstances {
 			if vnfc.ID == vnfcInstance.ID {
+				h.Logger.Debugf("Removing VNFCI %v:%v with Container %v", vnfc.Hostname, vnfc.ID, vnfcInstance.VCID)
 				cl.ContainerStop(ctx, vnfcInstance.VCID, &timeout)
 				go cl.ContainerRemove(ctx, vnfcInstance.VCID, types.ContainerRemoveOptions{
 					Force: true,
 				})
-				vdu.VNFCInstances = append(vdu.VNFCInstances[:i], vdu.VNFCInstances[i+1])
+				vdu.VNFCInstances = append(vdu.VNFCInstances[:i], vdu.VNFCInstances[i+1:]...)
 				return vnfr, nil
 			}
 		}
@@ -494,7 +496,6 @@ func (h *VnfmImpl) Terminate(vnfr *catalogue.VirtualNetworkFunctionRecord) (*cat
 		}
 	}
 	deleteConfig(vnfr.ID)
-
 	return vnfr, nil
 }
 
