@@ -1,12 +1,12 @@
   <img src="https://raw.githubusercontent.com/openbaton/openbaton.github.io/master/images/openBaton.png" width="250"/>
-  
-  Copyright © 2015-2016 [Open Baton](http://openbaton.org). 
+
+  Copyright © 2015-2016 [Open Baton](http://openbaton.org).
   Licensed under [Apache v2 License](http://www.apache.org/licenses/LICENSE-2.0).
 
 # Docker VNFM for Open Baton
-This VNF Manager, together with the [Docker Vim Driver](https://github.com/openbaton/go-docker-driver), allows Open Baton to deploy Container on top of a running [Docker](https://www.docker.com/) engine. 
+This VNF Manager, together with the [Docker Vim Driver](https://github.com/openbaton/go-docker-driver), allows Open Baton to deploy Container on top of a running [Docker](https://www.docker.com/) engine.
 
-Both VNFM and VIM Driver are necessary in order to be able to deploy NS over Docker 
+Both VNFM and VIM Driver are necessary in order to be able to deploy NS over Docker
 
 # How to install the Docker VNFM
 
@@ -20,7 +20,7 @@ the go compiler has to be installed, please follow the go documentation on how t
 
 If you installed Open Baton from source code and cloned the git repositories to your computer you will have to add the Docker VNFM to the NFVO by hand.  
 You can build it by yourself by cloning the Docker VNFM's git repository as follows:
-executing 
+executing
 
 ```bash
 git clone git@github.com:openbaton/go-docker-vnfm.git
@@ -29,34 +29,10 @@ make install
 ```
 
 Afterwards you will find the binary file in the _main_ folder.  
-Just run it as
+Run the following command for the usage:
 
 ```bash
 go-docker-vnfm --help
-Usage of ./docker-vnfm:
-  -conf string
-        The config file of the Docker Vim Driver (default "config.toml")
-  -dir string
-        The directory where to persist the local db (default "badger")
-  -level string
-        The Log Level of the Docker Vim Driver (default "INFO")
-  -persist
-        to persist the local database using badger (default true)
-``` 
-
-where config.toml looks like:
-
-```toml
-type        = "docker"
-endpoint    = "docker"
-allocate    = true
-workers     = 1
-description = "The Vnfm description"
-username    = "openbaton-manager-user"
-password    = "openbaton"
-logLevel    = "INFO"
-brokerIp    = "localhost"
-brokerPort  = 5672
 ```
 
 Or if you don't need special configuration you can use the default values just by running:
@@ -150,7 +126,7 @@ Issues and bug reports should be posted to the GitHub Issue Tracker of this proj
 
 OpenBaton is an open source project providing a comprehensive implementation of the ETSI Management and Orchestration (MANO) specification.
 
-Open Baton is a ETSI NFV MANO compliant framework. Open Baton was part of the OpenSDNCore (www.opensdncore.org) project started almost three years ago by Fraunhofer FOKUS with the objective of providing a compliant implementation of the ETSI NFV specification. 
+Open Baton is a ETSI NFV MANO compliant framework. Open Baton was part of the OpenSDNCore (www.opensdncore.org) project started almost three years ago by Fraunhofer FOKUS with the objective of providing a compliant implementation of the ETSI NFV specification.
 
 Open Baton is easily extensible. It integrates with OpenStack, and provides a plugin mechanism for supporting additional VIM types. It supports Network Service management either using a generic VNFM or interoperating with VNF-specific VNFM. It uses different mechanisms (REST or PUB/SUB) for interoperating with the VNFMs. It integrates with additional components for the runtime management of a Network Service. For instance, it provides autoscaling and fault management based on monitoring information coming from the the monitoring system available at the NFVI level.
 

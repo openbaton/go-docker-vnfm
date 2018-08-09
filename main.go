@@ -3,10 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+
 	"github.com/openbaton/go-docker-vnfm/handler"
 	"github.com/openbaton/go-openbaton/sdk"
 	"github.com/openbaton/go-openbaton/vnfmsdk"
-	"os"
 )
 
 func main() {
@@ -24,7 +25,11 @@ func main() {
 	var description = flag.String("desc", "The docker vnfm", "The description of the Docker Vim Driver")
 	var username = flag.String("username", "openbaton-manager-user", "The registering user")
 	var password = flag.String("password", "openbaton", "The registering password")
-	var brokerIp = flag.String("ip", "localhost", "The Broker Ip")
+	var brokerIp = flag.String("brokerIp", "localhost", "The Broker Ip")
+	brokerIpEnv, ok := os.LookupEnv("BROKER_IP")
+	if ok {
+		brokerIp = &brokerIpEnv
+	}
 	var brokerPort = flag.Int("port", 5672, "The Broker Port")
 	var workers = flag.Int("workers", 5, "The number of workers")
 	var allocate = flag.Bool("allocate", true, "if the docker vnfm must allocate resources (must be true)")
