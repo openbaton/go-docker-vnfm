@@ -125,7 +125,7 @@ func TestCreateService(t *testing.T) {
 	assert.NoError(t, err)
 	imagename := "ubuntu"
 	hostname := "ubuntu"
-	netName := "ingress"
+	netName := ""
 	netIds, err := getNetworkIdsFromNames(cli, []string{netName})
 	assert.NoError(t, err)
 	res, err := createServiceWait(log, cli, ctx, 0, imagename, hostname, []string{"while true; echo 'openbaton'"}, netIds, []string{}, []string{}, make(map[string][]string), false)
