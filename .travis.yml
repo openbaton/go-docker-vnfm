@@ -7,11 +7,11 @@ services:
 
 go:
   - "1.x"
-  - "1.8"
-  - "1.10.x"
 
 before_install:
   - docker swarm init
   - docker pull ubuntu:latest
+
+install:
   - curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
   - dep ensure
