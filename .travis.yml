@@ -16,4 +16,5 @@ before_install:
   - docker pull ubuntu:latest
 
 script:
+  - dep ensure -v
   - go test -v github.com/openbaton/go-docker-vnfm/handler 
