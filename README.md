@@ -16,7 +16,7 @@ The go compiler has to be installed, please follow the go documentation on how t
 
 ## Build the VNFM
 
-Assuming that your `GOPATH` variable is set to $HOME/go, run the following commands:
+Assuming that your `GOPATH` variable is set to $HOME/go (find out typing `go env`), run the following commands:
 
 ```bash
 mkdir -p ~/go/src/github.com/openbaton
