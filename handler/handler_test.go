@@ -47,7 +47,7 @@ func TestDockerListImagesByName(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	images, err := getImagesByName(cli, "iperfclient")
+	images, err := getImagesByName(cli, "ubuntu")
 	if err != nil {
 		panic(err)
 	}
