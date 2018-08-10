@@ -10,35 +10,35 @@ Both VNFM and VIM Driver are necessary in order to be able to deploy NS over Doc
 
 # How to install the Docker VNFM
 
-If you follow the documentation and use the bootstrap script to install Open Baton, the procedure will ask the user if he wants to install the Docker VNFM.
-
 ## Requirements
 
-the go compiler has to be installed, please follow the go documentation on how to [download](https://golang.org/dl/) it
+The go compiler has to be installed, please follow the go documentation on how to [download](https://golang.org/dl/) it
 
 ## Build the VNFM
 
-If you installed Open Baton from source code and cloned the git repositories to your computer you will have to add the Docker VNFM to the NFVO by hand.  
-You can build it by yourself by cloning the Docker VNFM's git repository as follows:
-executing
+Assuming that your `GOPATH` variable is set to $HOME/go, run the following commands:
 
 ```bash
+mkdir -p ~/go/src/github.com/openbaton
+cd ~/go/src/github.com/openbaton
 git clone git@github.com:openbaton/go-docker-vnfm.git
 cd go-docker-vnfm
-make install
+dep ensure -v
+go build -o go-docker-vnfm
 ```
 
-Afterwards you will find the binary file in the _main_ folder.  
-Run the following command for the usage:
+Afterwards check the usage by running:
 
 ```bash
-go-docker-vnfm --help
+./go-docker-vnfm --help
 ```
 
-Or if you don't need special configuration you can use the default values just by running:
+# How to start the Docker VNFM
+
+If you don't need special configuration, start the go-docker-vnfm just by running:
 
 ```bash
-$-> go-docker-vnfm
+./go-docker-vnfm
 ```
 
 # How to use the Docker VNFM
