@@ -9,12 +9,9 @@ go:
   - "1.x"
   - "1.8"
   - "1.10.x"
-  - master
 
 before_install:
   - docker swarm init
   - docker pull ubuntu:latest
-
-script:
-  - dep ensure -v
-  - go test -v github.com/openbaton/go-docker-vnfm/handler 
+  - curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+  - dep ensure

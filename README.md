@@ -23,7 +23,7 @@ mkdir -p ~/go/src/github.com/openbaton
 cd ~/go/src/github.com/openbaton
 git clone git@github.com:openbaton/go-docker-vnfm.git
 cd go-docker-vnfm
-dep ensure -v
+dep ensure
 go build -o go-docker-vnfm
 ```
 
