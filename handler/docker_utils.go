@@ -107,11 +107,6 @@ func createServiceWait(l *logging.Logger, client *docker.Client, ctx context.Con
 				Command:  cmd,
 				Image:    image,
 				Hostname: baseHostname,
-				//Privileges: &swarm.Privileges{
-				//	SELinuxContext: &swarm.SELinuxContext{
-				//		Disable: true,
-				//	},
-				//},
 			},
 			Networks: networks,
 			Placement: &swarm.Placement{
