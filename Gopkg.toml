@@ -43,11 +43,11 @@
 
 [[constraint]]
   name = "github.com/openbaton/go-docker-vnfm"
-  branch = "dep"
+  version = "6.0.0-RC1"
 
 [[constraint]]
   name = "github.com/openbaton/go-openbaton"
-  branch = "dep"
+  version = "6.0.0-RC1"
 
 [[constraint]]
   name = "github.com/pkg/errors"
