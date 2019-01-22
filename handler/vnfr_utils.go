@@ -67,11 +67,6 @@ func FillConfig(vnfr *catalogue.VirtualNetworkFunctionRecord, config *VnfrConfig
 				}
 				return false
 			}))
-			/*if strings.Contains(cp.Value, ":") {
-				config.PubPort = append(config.PubPort, strings.Split(cp.Value, ":"))
-			} else {
-				config.PubPort = append(config.PubPort, []string{cp.Value})
-			}*/
 		} else if kLower == "aliases" { // aliases looks like mgmt:name1,name2;net_d:name3,name4
 			if strings.Contains(cp.Value, ";") {
 				for _, val := range strings.Split(cp.Value, ";") {
