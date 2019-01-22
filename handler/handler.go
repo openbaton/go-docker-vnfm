@@ -216,8 +216,8 @@ func (h *VnfmImpl) Scale(chosenVimInstance interface{}, scaleInOrOut catalogue.A
 				return nil, nil, err
 			}
 		}
-		default:
-			return nil, nil, errors.New(fmt.Sprintf("Recieved type %T but VNFCInstance required", component))
+	default:
+		return nil, nil, errors.New(fmt.Sprintf("Recieved type %T but VNFCInstance required", component))
 	}
 	return vnfr, vnfci, nil
 }
@@ -317,13 +317,13 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 	for _, prts := range cfg.PubPort {
 		pubAllPort = true
 		var portSrc, portTrg nat.Port
-		if len(prts) == 2 {
-			portSrc, err = nat.NewPort("tcp", prts[0])
+		if len(prts) == 3 {
+			portSrc, err = nat.NewPort(prts[2], prts[0])
 			if err != nil {
 				debug.PrintStack()
 				return "", nil, "", err
 			}
-			portTrg, err = nat.NewPort("tcp", prts[1])
+			portTrg, err = nat.NewPort(prts[2], prts[1])
 			if err != nil {
 				debug.PrintStack()
 				return "", nil, "", err
@@ -331,7 +331,35 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 			portBindings[portTrg] = []nat.PortBinding{{
 				HostIP:   "0.0.0.0",
 				HostPort: portSrc.Port(),
-			},
+			}}
+		}
+		if len(prts) == 2 {
+			if prts[1] == "tcp" || prts[1] == "udp" {
+				portTrg, err = nat.NewPort(prts[1], prts[0])
+				if err != nil {
+					debug.PrintStack()
+					return "", nil, "", err
+				}
+				portBindings[portTrg] = []nat.PortBinding{{
+					HostIP: "0.0.0.0",
+				},
+				}
+			} else {
+				portSrc, err = nat.NewPort("tcp", prts[0])
+				if err != nil {
+					debug.PrintStack()
+					return "", nil, "", err
+				}
+				portTrg, err = nat.NewPort("tcp", prts[1])
+				if err != nil {
+					debug.PrintStack()
+					return "", nil, "", err
+				}
+				portBindings[portTrg] = []nat.PortBinding{{
+					HostIP:   "0.0.0.0",
+					HostPort: portSrc.Port(),
+				},
+				}
 			}
 		} else {
 			portTrg, err = nat.NewPort("tcp", prts[0])
