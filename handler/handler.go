@@ -332,8 +332,7 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 				HostIP:   "0.0.0.0",
 				HostPort: portSrc.Port(),
 			}}
-		}
-		if len(prts) == 2 {
+		} else if len(prts) == 2 {
 			if prts[1] == "tcp" || prts[1] == "udp" {
 				portTrg, err = nat.NewPort(prts[1], prts[0])
 				if err != nil {
