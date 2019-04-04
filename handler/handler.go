@@ -341,6 +341,7 @@ func (h *VnfmImpl) startContainer(cfg VnfrConfig, vduID string, firstNetName str
 				}
 				portBindings[portTrg] = []nat.PortBinding{{
 					HostIP: "0.0.0.0",
+					HostPort: portTrg.Port(),
 				},
 				}
 			} else {
